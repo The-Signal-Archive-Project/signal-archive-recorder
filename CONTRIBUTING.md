@@ -9,6 +9,27 @@ Thanks for helping. A few rules keep the project healthy and Apache-2.0 clean.
 - The build follows the staged plan in [CLAUDE.md](CLAUDE.md). Each stage lists the tests that must pass before the next one starts.
 - Tests must run without a radio, sound card, network or Hugging Face account; use the fakes in `tests/fakes/`. Real-hardware tests go in `tests/hardware/` and run with `pytest --hardware`.
 
+## Developer Certificate of Origin (DCO)
+
+Every commit must be signed off under the [Developer Certificate of Origin](https://developercertificate.org/). By signing off, you certify that you wrote the change, or otherwise have the right to submit it under the project's license (Apache-2.0). There's no form to sign; it's one line at the end of each commit message:
+
+```
+Signed-off-by: Your Name <you@example.com>
+```
+
+Git adds it for you with `-s`:
+
+```bash
+git commit -s -m "Add FT4 to the mode registry"
+```
+
+The name and email must match your git `user.name` and `user.email`. Use a real name, not an anonymous handle. A DCO check runs on every pull request. If it fails, add the sign-off to your existing commits and force-push your branch:
+
+```bash
+git rebase --signoff main
+git push --force-with-lease
+```
+
 ## Licensing rules
 
 The project is Apache-2.0, so **no GPL code may enter it.**

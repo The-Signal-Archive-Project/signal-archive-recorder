@@ -22,7 +22,7 @@ pytest -m "not hardware"   # offline test suite, no radio needed
 ruff check && ruff format --check && mypy
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request.
+See [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request. All commits must be signed off (`git commit -s`) under the [DCO](https://developercertificate.org/).
 
 ## License
 
