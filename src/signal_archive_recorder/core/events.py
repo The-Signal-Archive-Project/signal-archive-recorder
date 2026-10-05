@@ -69,6 +69,9 @@ class Decode(Event):
     dt_s: float | None = None
     df_hz: float | None = None
     low_confidence: bool | None = None
+    # True when the decoder was playing back a recording, not listening to the
+    # audio being captured. Such decodes are logged but never counted in chunk stats.
+    off_air: bool = False
 
 
 @dataclass(frozen=True, kw_only=True)

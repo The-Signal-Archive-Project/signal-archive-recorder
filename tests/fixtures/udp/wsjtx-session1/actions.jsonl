@@ -1,0 +1,7 @@
+{"after_seq": -1, "marked_utc": "capture start", "action": "1: idle on FT8, 20m"}
+{"after_seq": 38, "marked_utc": "2026-10-05T22:36:36", "action": "2 done: band 20m -> 40m"}
+{"after_seq": 73, "marked_utc": "2026-10-05T22:37:47", "action": "3 done: modes FT8 -> FT4 -> Q65 -> FT8 (WSPR skipped)"}
+{"after_seq": 115, "marked_utc": "2026-10-05T22:40:51", "action": "4 done: FT8 opened samples/FT8/210703_133430.wav"}
+{"after_seq": 140, "marked_utc": "2026-10-05T22:41:29", "action": "5 done: FT4 opened samples/FT4/000000_000002.wav"}
+{"after_seq": 146, "marked_utc": "2026-10-05T22:42:11", "action": "6 done: Tune on ~5 s, then off"}
+{"after_seq": 152, "marked_utc": "2026-10-05T22:42:32", "action": "7 done: File > Exit"}
