@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://signal-archive-project.org/schemas/recorder/mode-registry/1",
+  "title": "Signal Archive Recorder mode registry",
+  "type": "object",
+  "required": ["registry_version", "modes", "rig_modes"],
+  "additionalProperties": false,
+  "properties": {
+    "registry_version": { "type": "integer", "minimum": 1 },
+    "modes": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/mode" }
+    },
+    "rig_modes": {
+      "description": "Generic rig operating modes per source (e.g. Hamlib PKTUSB). They say how the rig is set up, not which digital mode is in use, so they resolve as ambiguous.",
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": { "$ref": "#/$defs/rig_mode" }
+      }
+    }
+  },
+  "$defs": {
+    "mode": {
+      "type": "object",
+      "required": ["id", "display_name", "family", "timing", "nominal_bw_hz", "sideband", "aliases", "params_schema"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+        "display_name": { "type": "string", "minLength": 1 },
+        "family": { "enum": ["wsjt", "js8", "psk", "fsk", "cw", "analog", "unknown"] },
+        "timing": { "$ref": "#/$defs/timing" },
+        "nominal_bw_hz": {
+          "description": "Typical occupied bandwidth; null when it depends on submode or speed.",
+          "type": ["number", "null"],
+          "exclusiveMinimum": 0
+        },
+        "sideband": { "enum": ["usb", "lsb", "none", null] },
+        "aliases": {
+          "description": "Exact raw mode strings per source that mean this mode.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 },
+            "uniqueItems": true
+          }
+        },
+        "params_schema": { "type": ["string", "null"], "pattern": "^[a-z0-9_]+\\.schema\\.json$" },
+        "notes": { "type": "string" }
+      }
+    },
+    "timing": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["kind", "period_s", "allowed_periods_s", "anchor"],
+          "additionalProperties": false,
+          "properties": {
+            "kind": { "const": "slotted" },
+            "period_s": { "type": "number", "exclusiveMinimum": 0 },
+            "allowed_periods_s": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": { "type": "number", "exclusiveMinimum": 0 }
+            },
+            "anchor": { "const": "utc_midnight" }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["kind"],
+          "additionalProperties": false,
+          "properties": { "kind": { "const": "async" } }
+        }
+      ]
+    },
+    "rig_mode": {
+      "type": "object",
+      "required": ["sideband", "data"],
+      "additionalProperties": false,
+      "properties": {
+        "sideband": { "enum": ["usb", "lsb", "none"] },
+        "data": { "type": "boolean", "description": "True for the rig's data/packet setting (e.g. PKTUSB)." }
+      }
+    }
+  }
+}
