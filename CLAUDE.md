@@ -179,22 +179,25 @@ Exit tests:
 ### Stage 4: WSJT-X / JTDX UDP listener (first Source adapter)
 
 Build:
-- `docs/protocols/wsjtx-udp.md`: our own description of the datagram format, written from WSJT-X's user documentation and our captures, with the evidence noted per field. Write this first.
-- `tools/capture_udp.py`, then capture fixtures from a live station running WSJT-X and JTDX
-- `qdatastream.py`: the primitives `quint32`, `qint32`, `quint64`, `qint64`, `bool`, `double`, `utf8` QString/QByteArray (length `0xFFFFFFFF` means null), and `QTime`/`QDateTime`
-- `messages.py`: magic `0xADBCCBDA`, schema 2/3, and the types Heartbeat (0), Status (1), Decode (2), Close (6), WSPRDecode (10). Other types are ignored but counted.
-- `listener.py`: unicast and multicast receive only, mapping each message to bus events
-- `tools/fake_wsjtx_emitter.py` (from `docs/protocols/wsjtx-udp.md` only)
+- `tools/capture_udp.py` (receive-only), then capture a live session into `tests/fixtures/udp/<name>/`: one `.bin` per datagram, plus `index.jsonl` (receive times) and `actions.jsonl` (what the operator did, and when). WSJT-X needs no radio: use Rig "None", and File → Open on sample WAVs to produce decodes.
+- `docs/protocols/wsjtx-udp.md`: our own description of every field, each with its evidence from the captures, and marked verified or unverified. WSJT-X's user guide points to its GPL source for the protocol, so captures are the only reference.
+- `qdatastream.py`: Qt `QDataStream` reader and writer, from Qt's public serialization docs.
+- `messages.py`: header (magic `0xADBCCBDA`, schema, type, client id) and Heartbeat (0), Status (1), Decode (2) and Close (6), each with `encode()`. Other types are ignored and counted.
+- `listener.py`: receive-only unicast or multicast socket, per-client state, and the events `SourceUp`/`SourceDown` (30 s timeout, or Close), `FreqChanged`, `ModeChanged` (with the Status T/R period), `TxStarted`/`TxEnded` and `Decode`. Each decode is also written to `wsjtx_decodes.jsonl`. Decode mode symbols (`~` FT8, `+` FT4) are registry aliases.
+- **Off-air decodes** (WSJT-X decoding a WAV file, not the radio) are logged with `off_air: true`, have no absolute time, and must never count in chunk statistics.
+- `tools/fake_wsjtx_emitter.py`: replays a captured session (`--replay DIR --speed N`) or generates synthetic traffic.
 
 Exit tests:
-- `test_parse_fixture[...]`: every captured datagram in `fixtures/udp/` parses to the expected dict (golden JSON next to each `.bin`). Fixtures cover WSJT-X 2.6 and 2.7 and JTDX.
-- `test_null_and_empty_strings`: null QString and empty QString are distinguished.
-- `test_truncated_and_garbage`: truncated packets, a bad magic number, unknown types and random bytes (hypothesis fuzz) never raise out of the listener. They are logged and counted.
-- `test_status_to_events`: a dial frequency change gives `FreqChanged`, a mode change gives `ModeChanged(mode_id=...)` resolved through the registry, and the transmitting flag gives `TxStarted`/`TxEnded`.
-- `test_decode_event`: Decode yields a normalised `Decode` (utc, snr, dt, df_hz, text, low_confidence, mode_id) with `raw` kept, and is appended to `wsjtx_decodes.jsonl`.
-- `test_heartbeat_timeout`: no Heartbeat or Status for 30 s (FakeClock) gives `SourceDown`, and Close gives `SourceDown` immediately.
-- `test_listener_never_sends`: the socket is wrapped so any `send`/`sendto` fails the test.
-- `test_multicast_shared` (integration): two listeners on the same multicast group both receive emitter traffic.
+- `test_parse_fixture_session1`: all captured datagrams parse, with hand-checked spot values (dial frequencies, modes, Q65 T/R period, Tune, the decode time matching the sample file name, the version).
+- `test_encoder_reproduces_capture_exactly`: `encode(parse(d)) == d` for every captured datagram, so the fake emitter sends real WSJT-X bytes.
+- `test_null_and_empty_strings`: null and empty text are distinguished.
+- `test_truncated_and_garbage`, `test_random_bytes_never_raise` (hypothesis), `test_unknown_type_counted`: bad input is counted and dropped, never raised.
+- `test_status_to_events`: replaying the capture gives exactly the expected `SourceUp` → band, mode, Q65-period and TX events → `SourceDown("closed")` sequence.
+- `test_decode_event`: 40 decodes mapped to ft8/ft4, all flagged off-air, and logged to `wsjtx_decodes.jsonl`. Also `test_live_decode_gets_utc_date`, `test_live_decode_just_before_midnight`, `test_unmapped_symbol_uses_status_mode` and `test_unknown_mode_flagged`.
+- `test_heartbeat_timeout`: `SourceDown` after 30 s (not before), closing an open TX interval, then `SourceUp` when the client returns.
+- `test_listener_never_sends`: any `send*` on the socket is recorded and must stay empty.
+- `test_multicast_shared`: two listeners in one multicast group both receive everything.
+- **Still to capture:** WSPR, JTDX and other WSJT-X versions. Add them as new fixture folders and extend the protocol doc.
 
 ### Stage 5: Session manager and chunker
 

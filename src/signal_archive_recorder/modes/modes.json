@@ -8,7 +8,7 @@
       "timing": { "kind": "slotted", "period_s": 15, "allowed_periods_s": [15], "anchor": "utc_midnight" },
       "nominal_bw_hz": 50,
       "sideband": "usb",
-      "aliases": { "wsjtx": ["FT8"], "jtdx": ["FT8"] },
+      "aliases": { "wsjtx": ["FT8", "~"], "jtdx": ["FT8"] },
       "params_schema": null
     },
     {
@@ -18,7 +18,7 @@
       "timing": { "kind": "slotted", "period_s": 7.5, "allowed_periods_s": [7.5], "anchor": "utc_midnight" },
       "nominal_bw_hz": 90,
       "sideband": "usb",
-      "aliases": { "wsjtx": ["FT4"], "jtdx": ["FT4"] },
+      "aliases": { "wsjtx": ["FT4", "+"], "jtdx": ["FT4"] },
       "params_schema": null
     },
     {

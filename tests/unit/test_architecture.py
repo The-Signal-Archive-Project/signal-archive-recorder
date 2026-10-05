@@ -45,7 +45,8 @@ def _mode_names() -> set[str]:
         names.add(mode.display_name.casefold())
         for raws in mode.aliases.values():
             names.update(r.casefold() for r in raws)
-    return names
+    # One-character decoder symbols ("~", "+") are too common to police as literals.
+    return {n for n in names if len(n) > 1}
 
 
 @pytest.mark.parametrize(
