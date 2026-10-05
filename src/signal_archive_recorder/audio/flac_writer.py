@@ -185,7 +185,8 @@ class FlacWriter:
 
 
 def _fsync(path: Path) -> None:
-    fd = os.open(path, os.O_RDONLY)
+    # Windows only flushes handles opened for writing.
+    fd = os.open(path, os.O_RDWR | getattr(os, "O_BINARY", 0))
     try:
         os.fsync(fd)
     finally:
@@ -195,4 +196,8 @@ def _fsync(path: Path) -> None:
 def _fsync_dir(path: Path) -> None:
     if os.name == "nt":  # Windows can't open directories; rename is journaled there
         return
-    _fsync(path)
+    fd = os.open(path, os.O_RDONLY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
