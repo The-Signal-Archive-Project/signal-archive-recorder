@@ -17,6 +17,7 @@ from typing import Protocol
 
 from signal_archive_recorder.audio.format import AudioFormat
 from signal_archive_recorder.audio.ringbuffer import RingBuffer
+from signal_archive_recorder.audio.timeline import StreamTimeline
 from signal_archive_recorder.core.bus import EventBus
 from signal_archive_recorder.core.clock import Clock
 from signal_archive_recorder.core.events import AudioGap, CaptureWarning
@@ -57,8 +58,10 @@ class Capture:
         sinks: list[Sink],
         buffer_seconds: float = 10.0,
         read_seconds: float = 0.1,
+        timeline: StreamTimeline | None = None,
     ) -> None:
         self.format = fmt
+        self.timeline = timeline or StreamTimeline(fmt.sample_rate)
         self._bus = bus
         self._clock = clock
         self._sinks = sinks
@@ -86,11 +89,19 @@ class Capture:
     def on_audio(self, data: memoryview, frames: int, overflow: bool) -> None:
         """The device callback. Never blocks and never raises."""
         try:
+            now = self._clock.now_ns()
+            # The callback runs as a block finishes, so its first frame is one block older.
+            block_start_ns = now - self.format.frames_to_ns(frames)
             if self.first_callback_ns is None:
-                self.first_callback_ns = self._clock.now_ns()
+                self.first_callback_ns = now
+                self.timeline.anchor(0, block_start_ns)
+            elif overflow:
+                # The driver lost an unknown amount of audio: re-anchor the timeline.
+                self.timeline.anchor(self._delivered, block_start_ns)
             if overflow:
                 self._overflows += 1
                 self._publish_gap(self._delivered, None, "driver_overflow")
+            self.timeline.maybe_sync(self._delivered + frames, now)
             taken = self._ring.write(data)
             dropped = frames - taken
             if taken and self._open_gap is not None:
@@ -118,13 +129,12 @@ class Capture:
         self._publish_gap(gap.stream_frame, gap.lost, "buffer_overrun")
 
     def _publish_gap(self, stream_frame: int, lost: int | None, reason: str) -> None:
-        start = self.first_callback_ns or 0
         self._bus.publish(
             AudioGap(
                 source=SOURCE,
                 stream_frame=stream_frame,
                 lost_frames=lost,
-                est_t_ns=start + self.format.frames_to_ns(stream_frame),
+                est_t_ns=self.timeline.frame_to_ns(stream_frame),
                 reason=reason,
             )
         )
