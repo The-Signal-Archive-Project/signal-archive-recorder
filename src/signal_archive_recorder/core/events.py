@@ -79,6 +79,29 @@ class SettingChanged(Event):
     value: str | int | float | bool | None
 
 
+@dataclass(frozen=True, kw_only=True)
+class AudioGap(Event):
+    """Audio frames that never reached disk.
+
+    stream_frame is the index (in frames delivered by the device) of the first lost
+    frame; est_t_ns is its estimated UTC time. lost_frames is None when the driver
+    reported an overflow without saying how much was lost.
+    """
+
+    stream_frame: int
+    lost_frames: int | None
+    est_t_ns: int
+    reason: str
+
+
+@dataclass(frozen=True, kw_only=True)
+class CaptureWarning(Event):
+    """Something the operator should know about; recording continues."""
+
+    code: str
+    message: str
+
+
 @dataclass(frozen=True)
 class Stamped:
     """An event as delivered by the bus: system time when published, plus sequence."""
