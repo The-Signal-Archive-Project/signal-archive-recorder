@@ -27,9 +27,10 @@ v0.1 targets **FT8 through WSJT-X**, but we'll add more modes quickly: FT4, WSPR
    - `id` (stable, lowercase, such as `ft8`) and `family` (`wsjt`, `fldigi`, `js8`, `cw`, `analog`, …)
    - `timing`: `{"kind": "slotted", "period_s": 15, "allowed_periods_s": [15], "anchor": "utc_midnight"}` or `{"kind": "async"}`. Modes with variable slot lengths (Q65, MSK144, JS8) list them all, and the source reports the period in use.
    - `nominal_bw_hz` and `sideband`
-   - `aliases`: per source, the raw strings that source reports (WSJT-X says `"FT8"`, Hamlib says `"PKTUSB"`, fldigi says `"BPSK31"`, …)
+   - `aliases`: per decoder program, the raw strings it reports (WSJT-X says `"FT8"`, fldigi says `"BPSK31"`, …)
    - `params_schema`: the name of a JSON sub-schema for the mode's `mode_params`
-   - The top-level `rig_modes` table lists generic rig settings per source (Hamlib `PKTUSB`, `USB`, …). These say how the rig is set up, not which digital mode is running, so they resolve as *ambiguous* with a list of candidates for decoder context to settle. Exact names go in `aliases`, which must be unique per source.
+   - **Only decoder programs identify the mode** (WSJT-X, JTDX, JS8Call, fldigi). A rig's operating mode (Hamlib/flrig `PKTUSB`, `USB`, `CW`, …) describes how the rig is set up, not which signal is being received. Rig sources publish it as `SettingChanged(name="rig_mode")` and never as a mode. The schema only accepts aliases from decoder sources, and aliases must be unique per source.
+   - With no decoder running, a chunk's `mode_id` is `null` with reason `source_unavailable`, and its `rig_mode` is still recorded. Never infer the mode from the rig mode or the frequency.
    - `registry.schema.json` validates the file, and `ModeRegistry` adds cross-checks (unique ids and aliases, periods that divide a day, the `unknown` fallback).
 3. **Metadata sources are adapters.** Every source (WSJT-X, JTDX, JS8Call, rigctld, flrig, fldigi, satellite software, clock) implements one `Source` protocol and only emits normalised, timestamped events onto the session bus: `FreqChanged`, `ModeChanged`, `TxStarted`/`TxEnded`, `Decode`, `SourceUp`/`SourceDown`, `SettingChanged`. Adapters keep their raw fields in an event's `raw` dict.
 4. **Chunk policy is derived from the mode's timing.**
@@ -134,7 +135,8 @@ Build:
 
 Exit tests:
 - `test_registry_loads_and_validates`: every entry matches the registry schema, ids are unique, and aliases are unique per source.
-- `test_alias_lookup`: `("wsjtx","FT8") → ft8`, `("hamlib","PKTUSB")` → no single mode (it is ambiguous, so the result needs decoder context), and an unknown raw string returns `unknown` with `raw` kept and `needs_mapping=True`.
+- `test_alias_lookup`: `("wsjtx","FT8") → ft8`, and an unknown raw string returns `unknown` with `raw` kept and `needs_mapping=True`.
+- `test_rig_control_sources_cannot_alias`: a `hamlib` alias in modes.json is rejected by the schema.
 - `test_chunk_policy_ft8`: 5-minute chunks; the boundaries are exact multiples of 300 s since UTC midnight and therefore fall on 15 s slot edges.
 - `test_chunk_policy_wspr`: 6-minute chunks on even minutes.
 - `test_chunk_policy_async`: 5-minute chunks on minute boundaries.
@@ -218,7 +220,7 @@ Build:
 
 Exit tests:
 - `test_session_and_chunk_validate`: generated files validate for every mode in the registry (contract-parametrised).
-- `test_unknown_is_null_with_reason`: with no rig source, filter, AGC and NB/NR are `null` with reason `source_unavailable`, never `0`, `""` or a guessed value.
+- `test_unknown_is_null_with_reason`: with no rig source, `rig_mode`, filter, AGC and NB/NR are `null` with reason `source_unavailable`, never `0`, `""` or a guessed value. With no decoder source, `mode_id` is `null` the same way.
 - `test_median_dt`: the chunk's median DT and decode count are right for a fixture decode set, and are `null`/`not_applicable` for async modes.
 - `test_events_list`: every freq, mode or setting change inside the chunk appears with its timestamp.
 - `test_privacy_no_leaks`: the uploaded files have none of `socket.gethostname()`, `getpass.getuser()`, the home directory path, device serials or the token, checked with a recursive string scan of every output file including decodes.
@@ -292,7 +294,7 @@ This is where most multi-mode work lands. Build:
 Exit tests:
 - `test_rigctld_readonly`: the fake rigctld logs every command; only get-commands (`f`, `m`, `l AGC`, …) are allowed and any set-command fails the test.
 - `test_rigctld_unreachable_or_drop`: gives `SourceDown`, recording continues, and the adapter reconnects with backoff.
-- `test_mode_resolution_with_decoder_context`: Hamlib `PKTUSB` plus active WSJT-X FT4 resolves to `ft4`, and `PKTUSB` with fldigi `BPSK31` resolves to `psk31`.
+- `test_rig_mode_is_a_setting`: rigctld reporting `PKTUSB` publishes `SettingChanged(name="rig_mode")` and never `ModeChanged`. With WSJT-X on FT4, the chunk has `mode_id: "ft4"` and `rig_mode: "PKTUSB"`. With no decoder running, `mode_id` is `null`/`source_unavailable` and `rig_mode` is still recorded.
 - `test_source_precedence`: when WSJT-X and rigctld disagree on frequency, WSJT-X wins for WSJT modes, both values are stored, and the disagreement is flagged.
 - `test_fldigi_modem_params`: modem name and parameters land in `mode_params` and validate against that mode's sub-schema.
 - Contract tests pass for every new registry entry.

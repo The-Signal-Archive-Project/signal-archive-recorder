@@ -91,7 +91,7 @@
       "timing": { "kind": "async" },
       "nominal_bw_hz": 250,
       "sideband": "lsb",
-      "aliases": { "fldigi": ["RTTY"], "hamlib": ["RTTY", "RTTYR"] },
+      "aliases": { "fldigi": ["RTTY"] },
       "params_schema": null,
       "notes": "Bandwidth is for 45.45 baud with 170 Hz shift. Amateur convention is LSB; AFSK on USB inverts mark and space."
     },
@@ -102,7 +102,7 @@
       "timing": { "kind": "async" },
       "nominal_bw_hz": null,
       "sideband": "none",
-      "aliases": { "fldigi": ["CW"], "hamlib": ["CW", "CWR"] },
+      "aliases": { "fldigi": ["CW"] },
       "params_schema": null,
       "notes": "Occupied bandwidth depends on keying speed."
     },
@@ -117,13 +117,5 @@
       "params_schema": null,
       "notes": "Fallback for raw mode strings no entry maps yet; the raw string is kept and flagged for a maintainer."
     }
-  ],
-  "rig_modes": {
-    "hamlib": {
-      "USB": { "sideband": "usb", "data": false },
-      "LSB": { "sideband": "lsb", "data": false },
-      "PKTUSB": { "sideband": "usb", "data": true },
-      "PKTLSB": { "sideband": "lsb", "data": true }
-    }
-  }
+  ]
 }

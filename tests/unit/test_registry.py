@@ -55,10 +55,11 @@ def test_same_alias_different_sources_allowed(registry: ModeRegistry) -> None:
     assert registry.resolve("wsjtx", "FT8").mode is registry.resolve("jtdx", "FT8").mode
 
 
-def test_alias_clashing_with_rig_mode_rejected() -> None:
+def test_rig_control_sources_cannot_alias() -> None:
+    """Option B: a rig setting such as PKTUSB or CW is never evidence of the mode."""
     data = _raw_registry()
     data["modes"][0]["aliases"]["hamlib"] = ["PKTUSB"]
-    with pytest.raises(RegistryError, match="both a mode alias and a rig mode"):
+    with pytest.raises(RegistryError, match="schema validation"):
         ModeRegistry(data)
 
 
@@ -95,16 +96,11 @@ def test_alias_lookup(registry: ModeRegistry) -> None:
     ft8 = registry.resolve("wsjtx", "FT8")
     assert ft8.kind is Resolution.EXACT
     assert ft8.mode.id == "ft8"
-    assert not ft8.needs_mapping and not ft8.needs_context
+    assert not ft8.needs_mapping
 
-    pkt = registry.resolve("hamlib", "PKTUSB")
-    assert pkt.kind is Resolution.AMBIGUOUS
-    assert pkt.needs_context and not pkt.needs_mapping
-    assert pkt.mode.id == "unknown"
-    ids = {m.id for m in pkt.candidates}
-    assert {"ft8", "ft4", "js8", "psk31"} <= ids
-    assert "unknown" not in ids
-    assert "rtty" not in ids  # registered as LSB
+    # Rig modes aren't modes: a rig source never resolves them, and if asked, they
+    # are just unknown strings.
+    assert registry.resolve("hamlib", "PKTUSB").kind is Resolution.UNKNOWN
 
     weird = registry.resolve("wsjtx", "FT9-EXPERIMENTAL")
     assert weird.kind is Resolution.UNKNOWN

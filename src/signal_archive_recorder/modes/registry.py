@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterator, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from decimal import Decimal
 from enum import Enum
 from importlib.resources import files
@@ -63,29 +63,22 @@ class Mode:
 
 class Resolution(Enum):
     EXACT = "exact"
-    AMBIGUOUS = "ambiguous"
     UNKNOWN = "unknown"
 
 
 @dataclass(frozen=True)
 class ModeResolution:
-    """The outcome of mapping one source's raw mode string to a registry mode."""
+    """The outcome of mapping a decoder's raw mode string to a registry mode."""
 
     source: str
     raw: str
     kind: Resolution
     mode: Mode
-    candidates: tuple[Mode, ...] = field(default=())
 
     @property
     def needs_mapping(self) -> bool:
         """True when a maintainer should add this raw string to modes.json."""
         return self.kind is Resolution.UNKNOWN
-
-    @property
-    def needs_context(self) -> bool:
-        """True when another source (usually the decoder) must pick among candidates."""
-        return self.kind is Resolution.AMBIGUOUS
 
 
 def _load_schema() -> dict[str, Any]:
@@ -152,16 +145,6 @@ class ModeRegistry:
         if UNKNOWN_MODE_ID not in self._modes:
             raise RegistryError(f"registry must define the {UNKNOWN_MODE_ID!r} fallback mode")
 
-        self._rig_modes: dict[tuple[str, str], Mapping[str, Any]] = {}
-        for source, table in data["rig_modes"].items():
-            for raw, info in table.items():
-                key = (source, raw.casefold())
-                if key in self._aliases:
-                    raise RegistryError(
-                        f"{raw!r} for source {source!r} is both a mode alias and a rig mode"
-                    )
-                self._rig_modes[key] = info
-
     @classmethod
     def load_default(cls) -> ModeRegistry:
         """The registry shipped with the package."""
@@ -182,17 +165,12 @@ class ModeRegistry:
         return self._modes[UNKNOWN_MODE_ID]
 
     def resolve(self, source: str, raw: str) -> ModeResolution:
-        """Map a raw mode string from a source. Matching ignores case and outer whitespace."""
+        """Map a decoder's raw mode string. Matching ignores case and outer whitespace.
+
+        Only decoder programs identify the mode. Rig-control sources report their
+        operating mode (PKTUSB, CW, ...) as a setting and never call this.
+        """
         key = (source, raw.strip().casefold())
         if (mode := self._aliases.get(key)) is not None:
             return ModeResolution(source, raw, Resolution.EXACT, mode)
-        if (info := self._rig_modes.get(key)) is not None:
-            candidates = tuple(
-                m
-                for m in self
-                if m.id != UNKNOWN_MODE_ID
-                and m.sideband == info["sideband"]
-                and not (info["data"] and m.family == "analog")
-            )
-            return ModeResolution(source, raw, Resolution.AMBIGUOUS, self.unknown, candidates)
         return ModeResolution(source, raw, Resolution.UNKNOWN, self.unknown)

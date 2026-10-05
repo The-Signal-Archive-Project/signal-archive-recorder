@@ -38,12 +38,13 @@ class FreqChanged(Event):
 
 @dataclass(frozen=True, kw_only=True)
 class ModeChanged(Event):
-    """mode_id is a registry id; raw_mode is the string the source reported."""
+    """Published only by decoder sources; mode_id is a registry id and raw_mode the
+    string the decoder reported. Rig-control sources publish their operating mode
+    (PKTUSB, CW, ...) as SettingChanged(name="rig_mode") instead."""
 
     mode_id: str
     raw_mode: str
     needs_mapping: bool = False
-    candidates: tuple[str, ...] = ()
     period_s: float | None = None
 
 
