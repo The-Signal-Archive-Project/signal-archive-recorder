@@ -18,7 +18,7 @@ _EMPTY: Mapping[str, Any] = MappingProxyType({})
 @dataclass(frozen=True, kw_only=True)
 class Event:
     source: str
-    raw: Mapping[str, Any] = field(default=_EMPTY)
+    raw: Mapping[str, Any] = field(default_factory=lambda: _EMPTY)
 
 
 @dataclass(frozen=True, kw_only=True)
