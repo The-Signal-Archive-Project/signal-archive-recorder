@@ -3,6 +3,7 @@
 Signal Archive Recorder is the station-side app of the **Signal Archive Project**. It records bit-exact receive audio from a ham station, collects every bit of metadata it can get automatically, and uploads sessions as pull requests to the project's Hugging Face intake dataset.
 
 - **Spec (source of truth):** "Signal Archive Recorder: Developer Reference" at https://claude.ai/artifact/3rtXJiU8buDYtBUx4J6izq. If this file and the spec disagree, follow the spec and update this file. Use "Signal Archive Recorder" for the app and "Signal Archive" for the wider project in all code, docs and UI text.
+- **Repo:** https://github.com/The-Signal-Archive-Project/signal-archive-recorder (org: The-Signal-Archive-Project). Work on branches and open PRs into the default branch; never push to it directly.
 - **License: Apache-2.0.** See "Licensing" below before adding any dependency or protocol code.
 
 ## Licensing (Apache-2.0)
