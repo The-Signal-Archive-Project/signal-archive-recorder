@@ -3,7 +3,7 @@
   "$id": "https://signal-archive-project.org/schemas/recorder/mode-registry/1",
   "title": "Signal Archive Recorder mode registry",
   "type": "object",
-  "required": ["registry_version", "modes", "rig_modes"],
+  "required": ["registry_version", "modes"],
   "additionalProperties": false,
   "properties": {
     "registry_version": { "type": "integer", "minimum": 1 },
@@ -11,14 +11,6 @@
       "type": "array",
       "minItems": 1,
       "items": { "$ref": "#/$defs/mode" }
-    },
-    "rig_modes": {
-      "description": "Generic rig operating modes per source (e.g. Hamlib PKTUSB). They say how the rig is set up, not which digital mode is in use, so they resolve as ambiguous.",
-      "type": "object",
-      "additionalProperties": {
-        "type": "object",
-        "additionalProperties": { "$ref": "#/$defs/rig_mode" }
-      }
     }
   },
   "$defs": {
@@ -38,8 +30,9 @@
         },
         "sideband": { "enum": ["usb", "lsb", "none", null] },
         "aliases": {
-          "description": "Exact raw mode strings per source that mean this mode.",
+          "description": "Exact raw mode strings per decoder program that mean this mode. Rig-control sources (Hamlib, flrig) are not allowed: a rig setting such as PKTUSB or CW is recorded as a setting, never as evidence of the mode.",
           "type": "object",
+          "propertyNames": { "enum": ["wsjtx", "jtdx", "js8call", "fldigi"] },
           "additionalProperties": {
             "type": "array",
             "items": { "type": "string", "minLength": 1 },
@@ -75,15 +68,6 @@
           "properties": { "kind": { "const": "async" } }
         }
       ]
-    },
-    "rig_mode": {
-      "type": "object",
-      "required": ["sideband", "data"],
-      "additionalProperties": false,
-      "properties": {
-        "sideband": { "enum": ["usb", "lsb", "none"] },
-        "data": { "type": "boolean", "description": "True for the rig's data/packet setting (e.g. PKTUSB)." }
-      }
     }
   }
 }
