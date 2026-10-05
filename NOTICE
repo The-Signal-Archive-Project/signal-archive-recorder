@@ -1,2 +1,8 @@
 Signal Archive Recorder
 Copyright 2026 The Signal Archive Project contributors
+
+This product uses the following separately licensed libraries, loaded
+dynamically at run time and not modified:
+
+- libsndfile (LGPL-2.1-or-later), https://libsndfile.github.io/libsndfile/
+  bundled in the soundfile package's wheels. It reads and writes FLAC.

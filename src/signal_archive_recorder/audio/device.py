@@ -182,6 +182,8 @@ class SoundDeviceBackend:
                 dtype=fmt.sample_format,  # sounddevice uses the same names
                 extra_settings=extra,
                 callback=on_block,
+                dither_off=True,  # PortAudio dithers format conversions by default
+                clip_off=True,
             )
         except sd.PortAudioError as exc:
             unavailable = "unavailable" in str(exc).lower() or "busy" in str(exc).lower()
