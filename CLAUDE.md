@@ -164,15 +164,17 @@ Exit tests:
 ### Stage 3: FLAC writer and verification
 
 Build:
-- `flac_writer.py`: streaming FLAC at maximum compression, with the MD5 in STREAMINFO
-- On close: verify by decoding and comparing MD5 (or using `flac -t`), then compute the file's SHA-256
-- Atomic finalisation (`.partial` → rename)
+- `flac_writer.py`: streaming FLAC through libsndfile (`soundfile`) at compression level 8, with the MD5 in STREAMINFO. Only int16 and int24 can be stored (FLAC is integer-only), so devices open at **int24** by default; 16-bit audio in a 24-bit FLAC costs about 1% more because FLAC drops the unused bits. float32 and int32 are rejected with a clear error.
+- On close: fsync, decode the file from disk, and require the decoded audio, the writer's own MD5 of the device bytes and the STREAMINFO MD5 to agree. Then compute SHA-256 and atomically rename `.flac.partial` → `.flac`. A failed chunk becomes `.flac.corrupt`. (FLAC's MD5 is defined over little-endian samples at the stream's byte width, which is exactly the device's bytes.)
+- `flac_recovery.py`: at startup, `.flac.partial` files from a crash are renamed to `.flac.crashed` first (so an interrupted recovery can rerun safely). Then their complete frames are found by walking frame headers (RFC 9639: sync code, frame number sequence, CRC-8, and CRC-16 on the last frame), the STREAMINFO sample count is patched, and the audio is decoded and re-encoded as a normal verified chunk flagged `recovered`. A file with no complete frames becomes `.flac.unrecoverable`.
+- The real backend opens PortAudio with `dither_off` and `clip_off`, because PortAudio dithers format conversions by default.
 
 Exit tests:
-- `test_flac_roundtrip_exact` (all formats from Stage 2): decoding gives identical samples, and the STREAMINFO MD5 equals the MD5 of the source PCM.
-- `test_flac_verify_detects_corruption`: flipping a byte in a finished file makes verification fail and the chunk is flagged, not uploaded.
-- `test_partial_file_on_crash`: killing the writer mid-chunk leaves a `.partial`, which startup recovery either finalises (if decodable) or flags.
+- `test_flac_roundtrip_exact` (int16/int24 × mono/stereo × 44.1k/48k): decoding gives identical samples, and the STREAMINFO MD5 equals the MD5 of the source PCM.
+- `test_flac_verify_detects_corruption`: flipping a bit in a finished file makes verification fail and the chunk is flagged, not uploaded.
+- `test_partial_file_on_crash`: killing a writer process mid-chunk leaves a `.partial`, and recovery produces a verified chunk that is a bit-exact prefix of the input. `test_unrecoverable_partial_flagged` and `test_interrupted_recovery_resumes` cover the other outcomes.
 - `test_sha256_matches_file`.
+- `test_unsupported_formats_rejected` (float32, int32).
 
 ### Stage 4: WSJT-X / JTDX UDP listener (first Source adapter)
 
