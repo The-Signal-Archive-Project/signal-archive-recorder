@@ -25,10 +25,12 @@ v0.1 targets **FT8 through WSJT-X**, but we'll add more modes quickly: FT4, WSPR
 1. **No mode names in core code.** The session manager, chunker, metadata builder and uploader never test `if mode == "FT8"`. Mode-specific behaviour comes from the mode registry (`modes.json`) or from a source adapter.
 2. **The mode registry is data.** Each entry in `src/signal_archive_recorder/modes/modes.json` gives:
    - `id` (stable, lowercase, such as `ft8`) and `family` (`wsjt`, `fldigi`, `js8`, `cw`, `analog`, …)
-   - `timing`: `{"kind": "slotted", "period_s": 15, "anchor": "utc_midnight"}` or `{"kind": "async"}`
+   - `timing`: `{"kind": "slotted", "period_s": 15, "allowed_periods_s": [15], "anchor": "utc_midnight"}` or `{"kind": "async"}`. Modes with variable slot lengths (Q65, MSK144, JS8) list them all, and the source reports the period in use.
    - `nominal_bw_hz` and `sideband`
    - `aliases`: per source, the raw strings that source reports (WSJT-X says `"FT8"`, Hamlib says `"PKTUSB"`, fldigi says `"BPSK31"`, …)
    - `params_schema`: the name of a JSON sub-schema for the mode's `mode_params`
+   - The top-level `rig_modes` table lists generic rig settings per source (Hamlib `PKTUSB`, `USB`, …). These say how the rig is set up, not which digital mode is running, so they resolve as *ambiguous* with a list of candidates for decoder context to settle. Exact names go in `aliases`, which must be unique per source.
+   - `registry.schema.json` validates the file, and `ModeRegistry` adds cross-checks (unique ids and aliases, periods that divide a day, the `unknown` fallback).
 3. **Metadata sources are adapters.** Every source (WSJT-X, JTDX, JS8Call, rigctld, flrig, fldigi, satellite software, clock) implements one `Source` protocol and only emits normalised, timestamped events onto the session bus: `FreqChanged`, `ModeChanged`, `TxStarted`/`TxEnded`, `Decode`, `SourceUp`/`SourceDown`, `SettingChanged`. Adapters keep their raw fields in an event's `raw` dict.
 4. **Chunk policy is derived from the mode's timing.**
    - Chunk length is the smallest multiple of the slot period that is ≥ the default (5 minutes).
@@ -83,7 +85,8 @@ LICENSE (Apache-2.0), NOTICE
 
 - **Build in the stage order below.** Don't start a stage until every test from earlier stages passes (`pytest -m "not hardware"`). Each stage ends with green tests, `ruff check`, `ruff format --check` and `mypy --strict src/`.
 - **Write the stage's tests first** (or alongside the code), using the fakes. Tests never need a radio, sound card, network or HF account. Real-hardware checks go under `tests/hardware/`.
-- **Inject time everywhere** through `core.clock.Clock`. Tests use `FakeClock` so that boundary and NTP tests are deterministic.
+- **Inject time everywhere** through `core.clock.Clock`. Tests use `FakeClock` so that boundary and NTP tests are deterministic. Times are integer nanoseconds since the Unix epoch (UTC).
+- **`tests/unit/test_architecture.py` enforces two rules:** no mode names (ids, display names, aliases) as string literals outside `modes/` and `sources/`, and no direct `time`/`datetime` clock reads outside `core/clock.py`.
 - **UDP parser fixtures** come from datagrams captured on our own station plus hand-built ones. When the protocol is unclear, capture more traffic and update `docs/protocols/`; never consult the other program's source code (see Licensing).
 - **Keep the UI thin.** If logic is creeping into `ui/`, move it into `session/` or `upload/` and test it there.
 
