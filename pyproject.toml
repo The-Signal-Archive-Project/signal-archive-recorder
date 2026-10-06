@@ -26,6 +26,7 @@ dependencies = [
     "ntplib>=0.4",
     "referencing>=0.28",
     "numpy>=1.26",
+    "packaging>=23",
     "sounddevice>=0.4.7",
     "soundfile>=0.13",
 ]

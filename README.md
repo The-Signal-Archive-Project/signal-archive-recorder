@@ -76,6 +76,10 @@ signal-archive-recorder requeue SESSION  # send a session again (e.g. if its PR 
 signal-archive-recorder cleanup --dry-run   # which confirmed uploads would be deleted to save space
 ```
 
+**Stereo inputs:** most radio interfaces appear as stereo, but usually only one channel carries the receiver (the other is a copy, or silent). Setup checks, and then records only the channel that matters, which halves the size without losing anything. It's picked out of the stereo stream byte for byte, so it stays bit-exact. Channels that really differ (a second receiver, or I/Q) are both kept. The choice is `[audio] keep_channel` (`both`, `left` or `right`).
+
+**New versions:** once a day the recorder asks GitHub whether a newer version is out, and says so in the window, the tray and the terminal. It never downloads or installs anything. Testers on a beta also hear about newer betas. Turn it off with `[updates] check = false`, or check by hand with `signal-archive-recorder check-update`.
+
 **Optional settings in the config:**
 - `[upload] schedule = "while_recording"` or `"overnight"`: upload in the background while `record` runs (the default is `"manual"`).
 - `[upload] max_mbps`: cap the average upload speed.

@@ -181,11 +181,26 @@ class AudioPage(QWizardPage):
         self.test = QPushButton("Test level (3 seconds)")
         self.test.clicked.connect(self.test_level)
         self.result = _label()
+        self.channel_note = _label()
+        self.channels = QComboBox()
+        for label, value in (
+            ("Both channels", "both"),
+            ("Left channel only", "left"),
+            ("Right channel only", "right"),
+        ):
+            self.channels.addItem(label, value)
+        self.channel_row = QWidget()
+        row = QFormLayout(self.channel_row)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.addRow("Record", self.channels)
+        self.channel_row.hide()
         self.tip = _label()
         layout = QVBoxLayout(self)
         layout.addWidget(self.devices)
         layout.addWidget(self.test)
         layout.addWidget(self.result)
+        layout.addWidget(self.channel_note)
+        layout.addWidget(self.channel_row)
         layout.addWidget(self.tip)
         self.candidates: list[Candidate] = []
 
@@ -230,8 +245,14 @@ class AudioPage(QWizardPage):
         data = item.data(Qt.ItemDataRole.UserRole) if item is not None else None
         return data if isinstance(data, DeviceInfo) else None
 
+    def keep_channel(self) -> str:
+        return str(self.channels.currentData()) if not self.channel_row.isHidden() else "both"
+
     def _picked(self) -> None:
         self.w.level = None
+        self.channel_row.hide()
+        self.channel_note.setText("")
+        self.channels.setCurrentIndex(0)
         self.result.setText("Press Test level with the radio on and receiving.")
         self.completeChanged.emit()
 
@@ -248,6 +269,11 @@ class AudioPage(QWizardPage):
             peak = "silence" if math.isinf(report.peak_dbfs) else f"{report.peak_dbfs:.1f} dBFS"
             advice = "" if report.verdict == "good" else " You can still use it, or pick another."
             self.result.setText(f"Peak level {peak}: <b>{report.verdict}</b>.{advice}")
+            rec = report.recommendation
+            if rec is not None:
+                self.channel_note.setText(f"Stereo input. {rec.explanation}")
+                self.channels.setCurrentIndex(self.channels.findData(rec.keep))
+                self.channel_row.show()
 
         def failed(exc: BaseException) -> None:
             self.test.setEnabled(True)
@@ -484,6 +510,7 @@ class SetupWizard(QWizard):
             self.env.tokens.set(self.new_token)
         choices = SetupChoices(
             device=device.name,
+            keep_channel=self.audio.keep_channel(),
             callsign=call,
             share_callsign=share,
             grid=grid,

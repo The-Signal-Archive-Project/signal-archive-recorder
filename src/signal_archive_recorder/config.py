@@ -55,6 +55,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from signal_archive_recorder.audio.channels import Keep
 from signal_archive_recorder.audio.format import SampleFormat
 from signal_archive_recorder.clockmon.monitor import DEFAULT_SERVERS
 from signal_archive_recorder.metadata.settings import StationSettings
@@ -75,6 +76,9 @@ class AudioConfig:
     file: Path | None = None
     file_speed: float = 1.0
     file_loop: bool = False
+    # Of a stereo input: "both", or just "left"/"right" when the other channel is a copy
+    # or silent (setup decides). Picked out of the stereo stream, so still bit-exact.
+    keep_channel: Keep = "both"
 
 
 @dataclass(frozen=True)
@@ -122,12 +126,13 @@ class RecorderConfig:
     # with_decoder: stand by, and record only while a decoder (WSJT-X) is running.
     # always: record from start to stop (WAV playback, decoder-less modes).
     start: str = "with_decoder"
+    check_updates: bool = True  # ask GitHub once a day whether a newer version is out
 
 
 _SECTIONS = {
     "storage": {"root", "max_gb", "delete_after_days"},
     "audio": {"device", "sample_rate", "sample_format", "channels", "buffer_seconds", "file",
-              "file_speed", "file_loop"},
+              "file_speed", "file_loop", "keep_channel"},
     "chunking": {"target_seconds"},
     "station": {"callsign", "share_callsign", "grid", "grid_precision", "hf_username",
                 "station_profile_id"},
@@ -135,6 +140,7 @@ _SECTIONS = {
     "clock": {"enabled", "interval_s", "servers"},
     "upload": {"repo", "require_decoder", "schedule", "overnight_window", "max_mbps"},
     "recording": {"start"},
+    "updates": {"check"},
 }  # fmt: skip
 
 
@@ -160,6 +166,8 @@ def parse_config(data: dict[str, Any], base: Path = Path()) -> RecorderConfig:
     audio = data.get("audio", {})
     if audio.get("sample_format", "int24") not in ("int16", "int24"):
         raise ConfigError("[audio] sample_format must be int16 or int24")
+    if audio.get("keep_channel", "both") not in ("both", "left", "right"):
+        raise ConfigError('[audio] keep_channel must be "both", "left" or "right"')
     if not audio.get("device") and not audio.get("file"):
         raise ConfigError("[audio] needs a device (see --list-devices) or a file")
     station = data.get("station", {})
@@ -201,6 +209,7 @@ def parse_config(data: dict[str, Any], base: Path = Path()) -> RecorderConfig:
                 file=path(audio["file"]) if audio.get("file") else None,
                 file_speed=float(audio.get("file_speed", 1.0)),
                 file_loop=bool(audio.get("file_loop", False)),
+                keep_channel=audio.get("keep_channel", "both"),
             ),
             target_chunk_s=int(data.get("chunking", {}).get("target_seconds", 300)),
             station=StationSettings(**station),
@@ -223,6 +232,7 @@ def parse_config(data: dict[str, Any], base: Path = Path()) -> RecorderConfig:
                 servers=tuple(clock.get("servers", DEFAULT_SERVERS)),
             ),
             start=start,
+            check_updates=bool(data.get("updates", {}).get("check", True)),
         )
     except (TypeError, ValueError) as exc:
         raise ConfigError(str(exc)) from exc

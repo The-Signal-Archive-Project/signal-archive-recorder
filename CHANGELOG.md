@@ -22,6 +22,12 @@ All notable changes to Signal Archive Recorder. Versions follow [semantic versio
 - If the sound card can't be opened (unplugged, say), the recorder says why and tries again every 30 s.
 - A session starts once WSJT-X's frequency and mode have been steady for 2 s, so WSJT-X's own start-up (which briefly reports several frequencies, including 0 Hz) no longer leaves tiny chunks. A 0 Hz dial is ignored.
 
+### Stereo inputs
+- Setup's level test checks both channels of a stereo input. If one is a copy of the other, or silent, only the useful channel is recorded (`[audio] keep_channel`), halving the size with nothing lost. It's picked out of the stereo stream byte for byte. Channels that differ (a second receiver, I/Q) are both kept, and the tray warns if a dropped channel starts carrying different audio. `session.json` records the choice (`audio.channel_selection`).
+
+### Updates
+- **New-version notice:** a daily check of GitHub's releases, shown in the window banner, as a tray message and in the terminal. It never installs anything. Beta users hear about newer betas; others only about releases. `[updates] check = false` turns it off; `signal-archive-recorder check-update` checks by hand.
+
 ### Desktop app
 - The tray icon is **blue** while ready and waiting for WSJT-X. Pause now also holds off recording until resumed.
 - **Setup window** on first start: terms, Hugging Face login with the permission check, audio input with a level test, station, WSJT-X and clock checks. Nothing is saved until Finish.

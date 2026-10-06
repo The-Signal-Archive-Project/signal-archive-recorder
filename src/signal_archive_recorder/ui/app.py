@@ -130,6 +130,13 @@ class StatusWindow(QWidget):
         self.setWindowTitle("Signal Archive Recorder")
         self.setMinimumWidth(460)
 
+        self.update_banner = QLabel()
+        self.update_banner.setOpenExternalLinks(True)
+        self.update_banner.setWordWrap(True)
+        self.update_banner.setStyleSheet(
+            "background: #2f6fd6; color: white; padding: 6px; border-radius: 4px;"
+        )
+        self.update_banner.hide()
         self.header_dot = QLabel()
         self.header = QLabel()
         self.header.setStyleSheet("font-size: 15px; font-weight: 600;")
@@ -195,6 +202,7 @@ class StatusWindow(QWidget):
         self.message.setWordWrap(True)
 
         layout = QVBoxLayout(self)
+        layout.addWidget(self.update_banner)
         layout.addLayout(top)
         layout.addLayout(grid)
         layout.addWidget(QLabel("Audio level"))
@@ -226,6 +234,13 @@ class StatusWindow(QWidget):
         peak = health.peak_dbfs if health.peak_dbfs is not None else METER_FLOOR_DBFS
         self.meter.setValue(int(max(METER_FLOOR_DBFS, min(0.0, peak))))
         self.pause_button.setText("Resume" if self.controller.paused else "Pause")
+        release = getattr(self.controller, "update", None)
+        if release is not None and self.update_banner.isHidden():
+            self.update_banner.setText(
+                f"Version {release.label} is available. "
+                f'<a style="color: white;" href="{release.url}">Download it here</a>.'
+            )
+            self.update_banner.show()
 
     # -- actions ------------------------------------------------------------------
 
@@ -297,6 +312,7 @@ class Tray:
 
     def __init__(self, window: StatusWindow, quit_app: Any) -> None:
         self.window = window
+        self._notified: Any = None
         self.icon = QSystemTrayIcon(QIcon(dot(window.state, 32)))
         menu = QMenu()
         show = QAction("Show status", menu)
@@ -318,6 +334,13 @@ class Tray:
         window.timer.timeout.connect(self.refresh)
 
     def refresh(self) -> None:
+        release = getattr(self.window.controller, "update", None)
+        if release is not None and release != self._notified:
+            self._notified = release
+            self.icon.showMessage(
+                "Signal Archive Recorder",
+                f"Version {release.label} is available. Open the status window to download it.",
+            )
         self.icon.setIcon(QIcon(dot(self.window.state, 32)))
         self.icon.setToolTip(f"Signal Archive Recorder: {TRAY_TEXT[self.window.state]}")
         self.pause.setText("Resume" if self.window.controller.paused else "Pause")

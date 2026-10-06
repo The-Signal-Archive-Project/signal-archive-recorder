@@ -15,6 +15,7 @@ from pathlib import Path
 class SetupChoices:
     device: str
     sample_rate: int | None = None
+    keep_channel: str = "both"
     callsign: str | None = None
     share_callsign: bool = False
     grid: str | None = None
@@ -46,6 +47,7 @@ device = {_q(c.device)}   # see: signal-archive-recorder devices
 {opt("sample_rate", str(c.sample_rate) if c.sample_rate else None,
      "default: the device's own rate (avoids OS resampling)")}
 sample_format = "int24"      # int16 or int24; 16-bit sound cards fit in int24 losslessly
+keep_channel = {_q(c.keep_channel)}   # stereo: both, or left/right if the other is a copy
 buffer_seconds = 10
 
 [recording]
@@ -76,6 +78,9 @@ repo = "signal-archive-project/signal-archive-intake"
 schedule = "manual"          # manual, while_recording or overnight (uploads in the background)
 overnight_window = "01:00-06:00"   # local time, for schedule = "overnight"
 max_mbps = 0                 # average upload cap in megabits/s; 0 = no cap
+
+[updates]
+check = true                 # daily: is a newer version out? (asks GitHub; never installs)
 """  # fmt: skip
 
 

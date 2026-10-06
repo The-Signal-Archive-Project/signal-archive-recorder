@@ -118,8 +118,10 @@ class SessionManager:
         holdback_s: float = 2.0,
         compression_level: int = 8,
         builder: MetadataBuilder | None = None,
+        channel_selection: dict[str, Any] | None = None,
     ) -> None:
         self.format = fmt
+        self._channel_selection = channel_selection  # which channel of a stereo input
         self._storage = storage
         self._registry = registry
         self._clock = clock
@@ -580,6 +582,11 @@ class SessionManager:
                     "sample_rate": self.format.sample_rate,
                     "channels": self.format.channels,
                     "sample_format": self.format.sample_format,
+                    **(
+                        {"channel_selection": self._channel_selection}
+                        if self._channel_selection
+                        else {}
+                    ),
                 },
                 "software": software,
                 "chunks": chunk_ids,

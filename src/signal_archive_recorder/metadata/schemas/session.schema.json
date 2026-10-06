@@ -187,6 +187,27 @@
             16,
             24
           ]
+        },
+        "channel_selection": {
+          "type": "object",
+          "required": [
+            "device_channels",
+            "kept"
+          ],
+          "additionalProperties": false,
+          "description": "Only one channel of a stereo input was recorded, because the other was a copy or silent (decided at setup). The kept channel is picked out byte for byte.",
+          "properties": {
+            "device_channels": {
+              "type": "integer",
+              "minimum": 2
+            },
+            "kept": {
+              "enum": [
+                "left",
+                "right"
+              ]
+            }
+          }
         }
       }
     },
