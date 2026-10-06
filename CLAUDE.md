@@ -382,6 +382,16 @@ The dataset must only contain receiver audio. Before every upload, `upload/scree
 
 ### Stage 9: Robustness (v0.3)
 
+Split into three PRs: **9a**, recording robustness (done below); **9b**, resumable and scheduled uploads, bandwidth cap, disk limits; **9c**, the tray and status window.
+
+**9a (done):**
+- `audio/sound_server.py`: on Linux, the `pipewire`, `pulse` and `default` devices misreport their rate (44.1 kHz while PipeWire runs at 48 kHz), so the real rate comes from the server (`pw-metadata` `clock.force-rate`/`clock.rate`, falling back to `pactl info`). `open_input(native_rate=…)` records at it by default and bases the resampling warning on it. `devices` and setup show it too. (Fixes #7; confirmed on the dev laptop: 48 kHz, no warning.)
+- A busy WSJT-X port (GridTracker or JTAlert holding 2237) no longer stops `record`: a `wsjtx_port_busy` warning with the multicast help (`listener.SETUP_HELP`), and recording continues without WSJT-X context.
+- `session/disk.py` `DiskMonitor`: checks free space every minute while recording. "Low" is the larger of 1 hour at the current rate and 2 GB, and "critical" is 200 MB. It warns once per level change, and never stops recording.
+- Tests: `tests/unit/test_stage9a.py`.
+
+**Remaining for 9b and 9c:**
+
 Build:
 - Optional GPS/GPSDO as a time source (the NTP clock monitor moved forward into v0.1, Stage 7b)
 - Multicast setup help

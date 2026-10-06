@@ -44,6 +44,7 @@ from signal_archive_recorder.audio.device import (
     DeviceUnavailableError,
     SoundDeviceBackend,
 )
+from signal_archive_recorder.audio.sound_server import native_rate
 from signal_archive_recorder.clockmon.monitor import ntplib_probe
 from signal_archive_recorder.config import ConfigError, RecorderConfig, load_config
 from signal_archive_recorder.core.clock import Clock, SystemClock
@@ -245,7 +246,8 @@ def cmd_devices(args: argparse.Namespace) -> int:
         return EXIT_DEVICE
 
     def line(d: DeviceInfo) -> str:
-        return f"{d.name}  [{d.host_api}, {d.max_input_channels} ch, {d.default_sample_rate} Hz]"
+        rate = native_rate(d)  # the sound server's real rate for pipewire/pulse/default
+        return f"{d.name}  [{d.host_api}, {d.max_input_channels} ch, {rate} Hz]"
 
     if args.all:
         for d in devices:

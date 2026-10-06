@@ -27,17 +27,20 @@ from signal_archive_recorder.audio.device import (
 )
 from signal_archive_recorder.audio.file_backend import FileBackend
 from signal_archive_recorder.audio.flac_recovery import Recovery
+from signal_archive_recorder.audio.sound_server import native_rate
 from signal_archive_recorder.audio.timeline import StreamTimeline
 from signal_archive_recorder.clockmon.monitor import ClockMonitor, NtpProbe, ntplib_probe
 from signal_archive_recorder.config import RecorderConfig
 from signal_archive_recorder.core.bus import EventBus
 from signal_archive_recorder.core.clock import Clock, SystemClock
+from signal_archive_recorder.core.events import CaptureWarning
 from signal_archive_recorder.metadata.builder import MetadataBuilder
 from signal_archive_recorder.modes import ModeRegistry
+from signal_archive_recorder.session.disk import DiskMonitor
 from signal_archive_recorder.session.manager import SessionManager
 from signal_archive_recorder.session.recovery import recover_storage
 from signal_archive_recorder.session.storage import SessionDir, SessionStorage
-from signal_archive_recorder.sources.wsjtx.listener import WsjtxListener
+from signal_archive_recorder.sources.wsjtx.listener import SETUP_HELP, WsjtxListener
 
 log = logging.getLogger(__name__)
 
@@ -80,6 +83,7 @@ class Recorder:
         self.stream: InputStream | None = None
         self.listener: WsjtxListener | None = None
         self.clock_monitor: ClockMonitor | None = None
+        self.disk_monitor: DiskMonitor | None = None
         self._ntp_probe = ntp_probe
         self.recovered: list[Recovery] = []
 
@@ -90,6 +94,12 @@ class Recorder:
         if audio.file is not None:
             return FileBackend(audio.file, speed=audio.file_speed, loop=audio.file_loop)
         return SoundDeviceBackend()
+
+    def _native_rate(self, device: DeviceInfo) -> int:
+        """The device's true rate (asking the sound server on Linux)."""
+        if self._backend is not None:  # injected backends (files, tests) know their own rate
+            return device.default_sample_rate
+        return native_rate(device)
 
     def start(self) -> SessionDir:
         cfg = self.config
@@ -112,6 +122,7 @@ class Recorder:
             sample_format=cfg.audio.sample_format,
             channels=cfg.audio.channels,
             sample_rate=cfg.audio.sample_rate,
+            native_rate=self._native_rate(device),
         )
         fmt = opened.delivered
         timeline = StreamTimeline(fmt.sample_rate)
@@ -129,6 +140,9 @@ class Recorder:
         for warning in opened.warnings:
             log.warning("%s", warning.message)
             bus.publish(warning)
+
+        self.disk_monitor = DiskMonitor(bus, cfg.storage_root, fmt.sample_rate * fmt.frame_bytes)
+        self.disk_monitor.start()
 
         if cfg.clock.enabled:
             self.clock_monitor = ClockMonitor(
@@ -150,7 +164,16 @@ class Recorder:
                 group=cfg.wsjtx.group,
                 decode_log=session.decode_log("wsjtx"),
             )
-            self.listener.start()
+            try:
+                self.listener.start()
+            except OSError as exc:  # usually: another program already has the port
+                self.listener = None
+                message = (
+                    f"Couldn't listen for WSJT-X on UDP port {cfg.wsjtx.port} ({exc}). Recording "
+                    f"continues without WSJT-X context. {SETUP_HELP}"
+                )
+                log.warning("%s", message)
+                bus.publish(CaptureWarning(source="wsjtx", code="wsjtx_port_busy", message=message))
 
         self.capture = holder["capture"] = Capture(
             fmt,
@@ -177,6 +200,8 @@ class Recorder:
             self.listener.stop()
         if self.clock_monitor is not None:
             self.clock_monitor.stop()
+        if self.disk_monitor is not None:
+            self.disk_monitor.stop()
         self.bus.wait_idle()
         chunks = self.manager.close(end_reason=reason)
         self.bus.close()
