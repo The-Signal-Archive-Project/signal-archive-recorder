@@ -111,6 +111,8 @@ class ReviewWindow(QWidget):
                 self.sessions.setCurrentItem(item)
         if not rows:
             self.details.setPlainText("No finished sessions yet.")
+        elif self.sessions.currentItem() is None:
+            self.sessions.setCurrentRow(0)  # the newest
         self._update_buttons()
 
     def selected(self) -> str | None:

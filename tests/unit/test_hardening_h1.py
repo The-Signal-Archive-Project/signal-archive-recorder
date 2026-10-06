@@ -329,7 +329,8 @@ def test_review_window(qtbot: Any) -> None:
     window.show()
     qtbot.waitUntil(lambda: window.sessions.count() == 2)
     assert "waiting to upload" in window.sessions.item(0).text()
-    assert window.upload_all.isEnabled() and not window.upload_one.isEnabled()
+    assert window.selected() == "20261005T120307Z"  # the newest is shown first
+    assert window.upload_all.isEnabled() and window.upload_one.isEnabled()
     window.sessions.setCurrentRow(1)  # already uploaded: can't upload again
     qtbot.waitUntil(lambda: "20261004T090000Z" in window.details.toPlainText())
     assert not window.upload_one.isEnabled()
