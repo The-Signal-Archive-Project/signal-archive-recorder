@@ -368,7 +368,9 @@ def test_labels_never_mix_with_recordings(tmp_path: Path) -> None:
         assert b"LABEL1" not in path.read_bytes(), path.name
     for chunk in chunks:
         assert not {"decodes", "labels"} & set(chunk)
-    labels = sorted(str(p.relative_to(rig.session.labels)) for p in rig.session.labels.rglob("*"))
+    labels = sorted(
+        p.relative_to(rig.session.labels).as_posix() for p in rig.session.labels.rglob("*")
+    )
     assert labels == ["wsjtx", "wsjtx/chunk_stats.jsonl", "wsjtx/decodes.jsonl"]
     assert "LABEL1" in rig.session.decode_log("wsjtx").read_text()
     session = json.loads(rig.session.session_json.read_text())
