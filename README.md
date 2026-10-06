@@ -37,11 +37,20 @@ To update later: `pipx upgrade signal-archive-recorder`. (Plain `pip install git
 ## Quick start
 
 ```bash
-signal-archive-recorder init       # creates your config and asks which audio input is the radio
-signal-archive-recorder record     # records until Ctrl-C
+signal-archive-recorder
 ```
 
-`init` writes the config to your user settings folder:
+The first time, this runs **setup**:
+1. the contribution terms
+2. your Hugging Face login, with a check that the token can upload
+3. your radio's audio input, picked from a recommended list for your OS, with a quick level check
+4. your callsign and grid, and how much of them to share
+5. a check for WSJT-X
+6. a clock check
+
+After that, the same command just records, until Ctrl-C. Run `signal-archive-recorder setup` to change your answers later, or `signal-archive-recorder init --device NAME` to write a config without questions (for scripts).
+
+Setup writes the config to your user settings folder:
 - Linux: `~/.config/signal-archive-recorder/recorder.toml`
 - macOS: `~/Library/Application Support/signal-archive-recorder/`
 - Windows: `%APPDATA%\signal-archive-recorder\`

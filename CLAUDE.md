@@ -339,6 +339,24 @@ Exit tests (fake Hugging Face `tests/fakes/fake_hf.py`, which uses `huggingface_
 - `test_review_shows_what_is_shared`.
 - Manual: `login` with a real token, then the first real `upload` to `signal-archive-project/signal-archive-intake`.
 
+### First-run setup (added after Stage 8)
+
+`signal-archive-recorder` with no arguments runs the setup wizard when there's no config, and otherwise records. Without a terminal, it prints how to set up instead of prompting.
+
+`firstrun/wizard.py` `Wizard` has six steps, and nothing is written until the end:
+1. Terms (consent).
+2. Hugging Face login: required, with `check_token` and a retry on a read-only or invalid token. Skipped if a stored token still works.
+3. Audio input, ranked by `firstrun/devices.py`:
+   - Windows prefers WASAPI over MME, DirectSound or WDM-KS.
+   - Linux prefers the sound-server devices, warns on raw `hw:` devices, and hides ALSA plugins.
+   - On every OS, radio interfaces rank up and microphones, webcams and Stereo Mix rank down.
+   - Then a 3-second level check, with silence and clipping verdicts.
+4. Station: callsign and opt-in sharing, grid and precision.
+5. WSJT-X UDP probe (receive only).
+6. NTP clock check.
+
+`firstrun/config_writer.py` writes a commented `recorder.toml`. `signal-archive-recorder setup` re-runs the wizard. Tests drive it with a scripted prompter and fakes (`tests/unit/test_firstrun.py`).
+
 ### Stage 9: Robustness (v0.3)
 
 Build:
