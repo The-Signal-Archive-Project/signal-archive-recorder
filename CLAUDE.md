@@ -40,14 +40,18 @@ v0.1 targets **FT8 through WSJT-X**, but we'll add more modes quickly: FT4, WSPR
    - A mode or dial-frequency change always starts a new chunk immediately.
    - Never hardcode "5 minutes aligned to the minute" anywhere except as the policy's default.
 5. **The core schema is mode-agnostic.** `chunk.meta.json` has generic fields plus `mode_id` and `mode_params`, which is validated by the per-mode sub-schema. Adding a mode must never change the core schema version.
-6. **Decodes are per source.** Write them as `<source>_decodes.jsonl` in the session folder (`wsjtx_decodes.jsonl`, `js8call_decodes.jsonl`, `fldigi_decodes.jsonl`). Each line has the normalised fields plus `raw`.
-7. **Per-mode stats are optional.** Median DT only makes sense for slotted WSJT-family modes. For other modes it is `null` with reason `"not_applicable"`.
+6. **Decoder output is a label, kept apart from recordings.** Write each decoder's decodes to `labels/<source>/decodes.jsonl` (normalised fields plus `raw`) and its per-chunk stats to `labels/<source>/chunk_stats.jsonl`.
+7. **Per-mode stats are optional.** Median DT only makes sense for slotted modes. For other modes it is `null` with reason `"not_applicable"`.
 8. **Contract tests cover every registered mode.** `tests/contract/` is parametrised over the registry, so a new entry is tested automatically (see "Adding a new mode" below).
 
 ## Non-negotiable rules (from the spec)
 
 - **Zero interference.** Never open audio exclusively, never open a serial port, and never send control messages to WSJT-X, the rig, rigctld or flrig except read-only queries. The UDP listener only receives.
 - **Bit-exact audio.** No resampling, gain, dither, or bit-depth or channel conversion. Record the format the device *actually* delivered, and warn if the OS is resampling.
+- **The recorder never decodes.** Its purpose is a reference library of raw signals, for building decoders and detectors that may beat today's. It uses other programs' reports only for context: chunk boundaries, mode, frequency and TX. What those programs decoded is kept as **labels**:
+  - Labels live under `labels/<source>/` and never sit in `recordings/`.
+  - They never appear inside a chunk's `.meta.json`.
+  - They're never mixed into FLAC or SigMF files.
 - **Audio wins.** A crashing or silent metadata source must never stop or corrupt capture. Each source runs isolated (its own thread or task, exceptions caught and logged), and its failure becomes a `SourceDown` event and a gap in the metadata.
 - **Unknown is `null` with a reason, never a default.** Reasons form a closed enum: `source_unavailable`, `not_reported`, `not_applicable`, `user_withheld`. A wrong default is worse than a blank.
 - **Privacy filtering happens before upload.** Strip anything not in the schema. No hostnames, file paths, OS usernames or device serials in uploaded files.
@@ -184,7 +188,7 @@ Build:
 - `docs/protocols/wsjtx-udp.md`: our own description of every field, each with its evidence from the captures, and marked verified or unverified. WSJT-X's user guide points to its GPL source for the protocol, so captures are the only reference.
 - `qdatastream.py`: Qt `QDataStream` reader and writer, from Qt's public serialization docs.
 - `messages.py`: header (magic `0xADBCCBDA`, schema, type, client id) and Heartbeat (0), Status (1), Decode (2) and Close (6), each with `encode()`. Other types are ignored and counted.
-- `listener.py`: receive-only unicast or multicast socket, per-client state, and the events `SourceUp`/`SourceDown` (30 s timeout, or Close), `FreqChanged`, `ModeChanged` (with the Status T/R period), `TxStarted`/`TxEnded` and `Decode`. Each decode is also written to `wsjtx_decodes.jsonl`. Decode mode symbols (`~` FT8, `+` FT4) are registry aliases.
+- `listener.py`: receive-only unicast or multicast socket, per-client state, and the events `SourceUp`/`SourceDown` (30 s timeout, or Close), `FreqChanged`, `ModeChanged` (with the Status T/R period), `TxStarted`/`TxEnded` and `Decode`. Each decode is also written to `labels/wsjtx/decodes.jsonl`. Decode mode symbols (`~` FT8, `+` FT4) are registry aliases.
 - **Off-air decodes** (WSJT-X decoding a WAV file, not the radio) are logged with `off_air: true`, have no absolute time, and must never count in chunk statistics.
 - `tools/fake_wsjtx_emitter.py`: replays a captured session (`--replay DIR --speed N`) or generates synthetic traffic.
 
@@ -194,7 +198,7 @@ Exit tests:
 - `test_null_and_empty_strings`: null and empty text are distinguished.
 - `test_truncated_and_garbage`, `test_random_bytes_never_raise` (hypothesis), `test_unknown_type_counted`: bad input is counted and dropped, never raised.
 - `test_status_to_events`: replaying the capture gives exactly the expected `SourceUp` → band, mode, Q65-period and TX events → `SourceDown("closed")` sequence.
-- `test_decode_event`: 40 decodes mapped to ft8/ft4, all flagged off-air, and logged to `wsjtx_decodes.jsonl`. Also `test_live_decode_gets_utc_date`, `test_live_decode_just_before_midnight`, `test_unmapped_symbol_uses_status_mode` and `test_unknown_mode_flagged`.
+- `test_decode_event`: 40 decodes mapped to ft8/ft4, all flagged off-air, and logged to `labels/wsjtx/decodes.jsonl`. Also `test_live_decode_gets_utc_date`, `test_live_decode_just_before_midnight`, `test_unmapped_symbol_uses_status_mode` and `test_unknown_mode_flagged`.
 - `test_heartbeat_timeout`: `SourceDown` after 30 s (not before), closing an open TX interval, then `SourceUp` when the client returns.
 - `test_listener_never_sends`: any `send*` on the socket is recorded and must stay empty.
 - `test_multicast_shared`: two listeners in one multicast group both receive everything.
@@ -208,9 +212,16 @@ Build:
   - Every event is placed at a stream frame, and audio is held back 2 s before it's committed, so changes split chunks at the exact frame. Later events are applied where they're noticed and flagged `late`.
   - A chunk ends at the first of: the policy boundary (from the mode and reported period at its start), a dial change, a mode change, or the session end. Simultaneous changes give a combined reason (`freq_change+mode_change`), and repeating the same value doesn't split.
   - Values are known only while their source is up. Otherwise they're `null` with reason `source_unavailable` (or `not_reported`).
-  - Each chunk records: TX intervals (split across chunks), source down intervals, gaps, levels, live vs off-air decode counts, its events, sync points, and its first-sample time and actual sample count.
+  - Each chunk records: TX intervals (split across chunks), source down intervals, gaps, levels, its events, sync points, and its first-sample time and actual sample count. Decode counts per source are kept separately as label stats.
   - FLAC finalisation (verify, then write `meta.json`) runs on a separate thread.
-- `session/storage.py`: `sessions/<UTC start id>/{session.json, NNNN_<UTC>.flac, NNNN_<UTC>.meta.json, <source>_decodes.jsonl}`, with JSON written atomically.
+- `session/storage.py`, with JSON written atomically:
+  ```
+  sessions/<UTC start id>/
+    session.json
+    recordings/       NNNN_<UTC>.flac and NNNN_<UTC>.meta.json: raw signal data and recording metadata only
+    labels/<source>/  decodes.jsonl and chunk_stats.jsonl: third-party decoder output
+    local/            diagnostics for this machine (e.g. .meta.invalid.json); never uploaded
+  ```
 - `sources/base.py` `SupervisedSource`: runs a source loop on its own thread, publishes `SourceDown("crashed: …")` on an exception, and restarts with exponential backoff.
 - `meta.json` and `session.json` are preliminary here. Stage 6 defines their schemas and privacy filtering.
 
@@ -232,7 +243,7 @@ Build:
 - `modes/schemas/slotted_params.schema.json`, used by every slotted mode's `params_schema` (period, frequency tolerance, sub-mode). Async modes have no params. The registry rejects a mode whose params schema file is missing.
 - `metadata/builder.py` `MetadataBuilder`: copies named fields from the manager's internal record into the public schema, and never copies whole objects. Unlisted settings, event fields, mode params and decode `raw` keys are dropped and logged (`builder.dropped`). Every file is validated before it's written. A validation failure is a bug: the record is written locally as `.meta.invalid.json` and never published.
   - Band comes from `metadata/bands.json` (`not_applicable` outside the amateur bands).
-  - Decode stats count only live decodes: median DT and count, `not_applicable` for async modes and `not_reported` when there are none.
+  - Decode stats go to `labels/<source>/chunk_stats.jsonl`, never into chunk metadata. They count only live decodes (median DT and count), are `not_applicable` for async modes, and are `not_reported` when the decoder ran but heard nothing.
   - Crash reasons are reduced to the exception type.
   - Decode logs are rewritten through the filter when the session closes, so sources must be stopped first.
 - `metadata/privacy.py`: `Scrubber` (hostname, user, home and absolute paths, device names) for the few free-text fields, and `DecodeRedactor` for the operator's own call and grid.
@@ -242,7 +253,8 @@ Build:
 Exit tests:
 - `test_session_and_chunk_validate` (contract test, every registered mode).
 - `test_unknown_is_null_with_reason`: no sources means every radio, mode, decode and path value is null with `source_unavailable`. `test_values_present_when_reported` checks the opposite.
-- `test_median_dt`, `test_median_dt_not_applicable_for_async` and `test_no_decodes_is_not_reported`.
+- `test_median_dt`, `test_median_dt_not_applicable_for_async` and `test_no_decodes_is_not_reported` (all on label stats).
+- `test_labels_never_mix_with_recordings`: `recordings/` holds only FLAC and chunk metadata with no decoded text, chunk metadata has no decode fields, and labels exist only under `labels/<source>/`.
 - `test_events_list`.
 - `test_privacy_no_leaks`: adapters inject the hostname, home paths, a device serial and the own call and grid. A scan of every file in the session folder finds none of them. (Checked by disabling the scrubber, which makes the test fail.)
 - `test_grid_precision` (withheld, 4, 6 or 8; never more than is known), `test_callsign_shared_when_chosen` and `test_redaction_rules`.
@@ -251,15 +263,23 @@ Exit tests:
 ### Stage 7: Headless CLI, end-to-end (finishes v0.1)
 
 Build:
-- `cli.py --headless --config file.toml`
-- Startup recovery of `.partial` files
-- Graceful shutdown that finalises the current chunk and writes `session.json` end time
+- `config.py`: a TOML config (`examples/recorder.toml`) with sections for storage, audio (device name, or a WAV file), chunking, station (callsign and sharing choice, grid and precision) and wsjtx. Unknown sections and keys are errors.
+- `recorder.py` `Recorder`. Start order: recover, open the device (so a missing device fails before any session exists), open the session, start the listener, start the capture writer, then start the stream. Stop runs in reverse, with sources stopped before the session closes.
+- `session/recovery.py`: `.flac.partial` files under `sessions/*/recordings/` are recovered with metadata built from the audio alone (`recovered`/`crashed`, timeline unknown), and the crashed session's `session.json` is updated. Unrecoverable files move to `local/`.
+- `audio/file_backend.py` `FileBackend`: plays a 16- or 24-bit WAV as if it were a sound card, in real time or faster, through `[audio] file = …`.
+- `cli.py`: `signal-archive-recorder --headless --config FILE`, `--list-devices` and `--version`. SIGINT, SIGTERM and SIGBREAK (Windows Ctrl-Break) stop cleanly. Exit codes: 0 for a clean stop, 2 for a config error, 3 for an audio device problem.
 
 Exit tests:
-- `test_e2e_ft8_session` (integration): a 12-minute simulated FT8 session (fake audio from fixtures, fake WSJT-X with decodes, one band change, two TX periods) produces the expected chunk count. Every FLAC verifies, every JSON validates, decodes are in the JSONL, and the privacy scan is clean.
-- `test_sigterm_mid_chunk`: SIGTERM finalises a valid short chunk, and `session.json` has an end time.
-- `test_restart_recovers_partial`.
-- Hardware/manual: run against your own station for an evening and spot-check that the decodes line up with audio timestamps.
+- `test_e2e_ft8_session` (`tests/integration`): the real `Recorder` with a fake sound card on a fake clock and real UDP WSJT-X datagrams, running 12 minutes of FT8 with one band change and two TX periods. It checks:
+  - the expected 5 chunks, with boundaries, end reasons and TX intervals
+  - every FLAC verifies, and together they concatenate to the input byte for byte
+  - every chunk, session, label-stats and decode file validates
+  - all 90 decodes are in `labels/wsjtx/decodes.jsonl`, with the operator's call redacted
+  - the privacy scan of the whole session folder is clean
+- `test_sigterm_mid_chunk`: a real CLI process on `FileBackend` gets SIGTERM (Ctrl-Break on Windows) about 2.5 s in. It exits 0, writes one verified short chunk that's a bit-exact prefix of the WAV, and `session.json` has its end time and `end_reason: "signal"`.
+- `test_restart_recovers_partial`: a crashed chunk is recovered with valid metadata, a garbage partial moves to `local/`, and the old session is marked `crashed`.
+- `test_missing_device_fails_cleanly`, plus `tests/unit/test_config.py`.
+- Hardware/manual: run against your own station for an evening, and spot-check that the WSJT-X labels line up with audio timestamps.
 
 **→ Tag v0.1.**
 

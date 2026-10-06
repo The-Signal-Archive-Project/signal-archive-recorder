@@ -1,0 +1,30 @@
+# Signal Archive Recorder configuration.
+# Run: signal-archive-recorder --headless --config recorder.toml
+# Find your device name with: signal-archive-recorder --list-devices
+
+[storage]
+root = "~/SignalArchive"
+
+[audio]
+device = "USB Audio CODEC"   # part of the device name
+sample_format = "int24"      # int16 or int24; 16-bit sound cards fit in int24 losslessly
+buffer_seconds = 10
+# sample_rate = 48000        # default: the device's own rate (avoids OS resampling)
+# file = "reference.wav"     # play a 16/24-bit WAV instead of a device (no radio needed)
+# file_speed = 1.0
+
+[chunking]
+target_seconds = 300
+
+[station]
+# callsign = "W9XYZ"
+share_callsign = false       # true publishes your callsign (public, and helps attribution)
+# grid = "EN52wa"
+grid_precision = 4           # characters shared: 0 (withheld), 4, 6 or 8
+# hf_username = "your-hf-name"
+
+[wsjtx]
+enabled = true
+port = 2237
+bind = "127.0.0.1"
+# group = "224.0.0.1"        # multicast: share WSJT-X with GridTracker or JTAlert
