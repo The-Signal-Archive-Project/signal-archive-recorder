@@ -22,6 +22,8 @@ from __future__ import annotations
 
 import json
 import logging
+import time
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from enum import StrEnum
 from pathlib import Path
@@ -33,7 +35,13 @@ from signal_archive_recorder.metadata.settings import StationSettings
 from signal_archive_recorder.modes.registry import ModeRegistry
 from signal_archive_recorder.session.storage import SessionStorage, write_json_atomic
 from signal_archive_recorder.upload.consent import ConsentStore
-from signal_archive_recorder.upload.hub import DEFAULT_REPO, Hub, PrNotFoundError, check_token
+from signal_archive_recorder.upload.hub import (
+    DEFAULT_REPO,
+    Hub,
+    PrNotFoundError,
+    PrRef,
+    check_token,
+)
 from signal_archive_recorder.upload.review import preflight, remove_chunk, review, upload_files
 from signal_archive_recorder.upload.screening import save as save_screening
 from signal_archive_recorder.upload.screening import screen_session
@@ -69,6 +77,9 @@ class UploadRecord:
     problems: list[str] = field(default_factory=list)
     validator_messages: list[str] = field(default_factory=list)
     excluded: list[dict[str, Any]] = field(default_factory=list)  # chunks screening kept back
+    sent_files: list[str] = field(default_factory=list)  # confirmed in the PR so far
+    failures: int = 0  # consecutive failed attempts, for backoff
+    next_attempt_ns: int = 0  # automatic retries wait until then
     updated_ns: int = 0
 
     @classmethod
@@ -103,6 +114,25 @@ class DryRun:
     warnings: list[tuple[str, list[str]]] = field(default_factory=list)
 
 
+BACKOFF_BASE_S = 60.0
+BACKOFF_MAX_S = 6 * 3600.0
+
+
+def plan_steps(session_dir: Path) -> list[list[str]]:
+    """The order a session goes up in: each chunk, then labels and session.json.
+
+    session.json goes last, so its presence in the PR means the upload is complete.
+    """
+    files = [p.relative_to(session_dir).as_posix() for p in upload_files(session_dir)]
+    chunks: dict[str, list[str]] = {}
+    for f in files:
+        if f.startswith("recordings/"):
+            chunks.setdefault(f.split("/", 1)[1].split(".", 1)[0], []).append(f)
+    last = [f for f in files if not f.startswith("recordings/")]
+    last.sort(key=lambda f: f == "session.json")
+    return [sorted(chunks[c]) for c in sorted(chunks)] + ([last] if last else [])
+
+
 def pr_title(path_in_repo: str) -> str:
     return f"Add session {path_in_repo}"
 
@@ -120,7 +150,11 @@ class Uploader:
         registry: ModeRegistry | None = None,
         builder: MetadataBuilder | None = None,
         require_decoder: bool = True,
+        max_bytes_per_s: float | None = None,
+        sleep: Callable[[float], None] = time.sleep,
     ) -> None:
+        self.max_bytes_per_s = max_bytes_per_s
+        self.sleep = sleep
         self.storage = storage
         self.registry = registry or ModeRegistry.load_default()
         self.builder = builder or MetadataBuilder(self.registry, StationSettings())
@@ -178,27 +212,67 @@ class Uploader:
         record.attempts += 1
         record.save(session_dir, self.clock.now_ns())
         try:
-            pr = self.hub.find_open_pr(token, self.repo_id, identity.username, title)
-            if pr is None:
-                pr = self.hub.open_pr(
-                    token,
-                    self.repo_id,
-                    session_dir,
-                    path_in_repo,
-                    title,
-                    self._description(session_dir),
-                )
+            self._send(session_dir, record, token, identity.username, path_in_repo, title)
         except Exception as exc:
-            record.state = UploadState.QUEUED  # keep everything; retry later
+            # Keep everything, including the PR if one was opened: the next attempt
+            # resumes from the files the PR already has.
+            record.state = UploadState.QUEUED
             record.last_error = scrub_token(f"{type(exc).__name__}: {exc}", token)
+            record.failures += 1
+            delay = min(BACKOFF_BASE_S * 2 ** (record.failures - 1), BACKOFF_MAX_S)
+            record.next_attempt_ns = self.clock.now_ns() + int(delay * 1e9)
             record.save(session_dir, self.clock.now_ns())
-            log.warning("upload of %s failed: %s", session_dir.name, record.last_error)
+            log.warning("upload of %s failed (retry in %d s): %s", session_dir.name, delay,
+                        record.last_error)  # fmt: skip
             return record
-        record.state, record.pr_num, record.pr_url = UploadState.PR_OPENED, pr.num, pr.url
-        record.pr_state, record.last_error = "open", None
+        record.state, record.pr_state, record.last_error = UploadState.PR_OPENED, "open", None
+        record.failures, record.next_attempt_ns = 0, 0
         record.save(session_dir, self.clock.now_ns())
-        log.info("opened %s for %s", pr.url, session_dir.name)
+        log.info("uploaded %s as %s", session_dir.name, record.pr_url)
         return record
+
+    def _send(
+        self,
+        session_dir: Path,
+        record: UploadRecord,
+        token: Token,
+        username: str,
+        path_in_repo: str,
+        title: str,
+    ) -> None:
+        """Send the session in steps, skipping whatever the PR already has."""
+        pr: PrRef | None = None
+        if record.pr_num is not None and record.pr_url is not None:
+            pr = PrRef(record.pr_num, record.pr_url)
+        else:
+            pr = self.hub.find_open_pr(token, self.repo_id, username, title)
+        present = self.hub.pr_files(token, self.repo_id, pr.num) if pr else set()
+        for step in plan_steps(session_dir):
+            remaining = [f for f in step if f"{path_in_repo}/{f}" not in present]
+            if not remaining:
+                continue
+            started = self.clock.monotonic_ns()
+            if pr is None:
+                pr = self.hub.open_pr(token, self.repo_id, session_dir, path_in_repo, title,
+                                      self._description(session_dir), remaining)  # fmt: skip
+                record.pr_num, record.pr_url = pr.num, pr.url
+            else:
+                self.hub.add_to_pr(token, self.repo_id, pr.num, session_dir, path_in_repo,
+                                   remaining, f"Add {', '.join(remaining)}")  # fmt: skip
+            record.sent_files = sorted(set(record.sent_files) | set(remaining))
+            record.save(session_dir, self.clock.now_ns())
+            self._pace(sum((session_dir / f).stat().st_size for f in remaining), started)
+        if pr is not None and record.pr_num is None:  # everything was already there
+            record.pr_num, record.pr_url = pr.num, pr.url
+
+    def _pace(self, sent_bytes: int, started_ns: int) -> None:
+        """Wait long enough that the average stays under the bandwidth cap."""
+        if not self.max_bytes_per_s:
+            return
+        elapsed = (self.clock.monotonic_ns() - started_ns) / 1e9
+        wait = sent_bytes / self.max_bytes_per_s - elapsed
+        if wait > 0:
+            self.sleep(wait)
 
     def _description(self, session_dir: Path) -> str:
         r = review(session_dir)
@@ -260,7 +334,8 @@ class Uploader:
         record = UploadRecord.load(session_dir)
         record.state, record.problems = UploadState.QUEUED, []
         record.pr_num = record.pr_url = record.pr_state = record.last_error = None
-        record.validator_messages = []
+        record.validator_messages, record.sent_files = [], []
+        record.failures = record.next_attempt_ns = 0
         record.save(session_dir, self.clock.now_ns())
         return record
 
@@ -284,8 +359,12 @@ class Uploader:
                       excluded, warnings)  # fmt: skip
 
     def upload_all(self) -> list[tuple[Path, UploadRecord]]:
+        """Upload every finished, queued session whose backoff has passed."""
         results = []
+        now = self.clock.now_ns()
         for session_dir, record in self.sessions():
+            if record.next_attempt_ns > now:
+                continue
             if record.state is UploadState.QUEUED and review(session_dir).finished:
                 results.append((session_dir, self.upload(session_dir)))
         return results

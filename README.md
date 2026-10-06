@@ -73,7 +73,15 @@ signal-archive-recorder upload --dry-run # see exactly what would be sent (and k
 signal-archive-recorder upload           # one pull request per session
 signal-archive-recorder status           # follow up the pull requests
 signal-archive-recorder requeue SESSION  # send a session again (e.g. if its PR was deleted)
+signal-archive-recorder cleanup --dry-run   # which confirmed uploads would be deleted to save space
 ```
+
+**Optional settings in the config:**
+- `[upload] schedule = "while_recording"` or `"overnight"`: upload in the background while `record` runs (the default is `"manual"`).
+- `[upload] max_mbps`: cap the average upload speed.
+- `[storage] max_gb` and `delete_after_days`: keep the archive small. Only sessions whose upload has been confirmed are ever deleted.
+
+Uploads resume where they left off if the connection drops.
 
 Before anything is sent, the recorder checks that each chunk really is your radio's receive audio: a decoder such as WSJT-X was running, and the signals it decoded are actually present in the recording. Chunks that fail (for example, the wrong audio input was picked) stay on your computer, in the session's `local/excluded/` folder, with the reason.
 

@@ -46,6 +46,9 @@ class FakeHub:
         self.fail_next_upload: Exception | None = None
         self.create_pr_then_fail = False  # PR made, then the connection drops
         self.offline = False  # every status check fails, like a dropped connection
+        self.fail_on_step: int | None = None  # fail the Nth upload step (1-based), once
+        self.steps: list[list[str]] = []  # the files sent by each upload step, in order
+        self.on_step: Any = None  # called with the bytes of each step (e.g. to pass time)
 
     def add_token(self, value: str, user: str = "volunteer", role: str = "write",
                   fine_grained: Any = None) -> Token:  # fmt: skip
@@ -65,26 +68,52 @@ class FakeHub:
         self.calls.append("whoami")
         return self._user(token)
 
-    def open_pr(self, token: Token, repo_id: str, folder: Path, path_in_repo: str, title: str,
-                description: str) -> PrRef:  # fmt: skip
-        self.calls.append("open_pr")
+    def _send(self, token: Token, folder: Path, path_in_repo: str, files: Any) -> dict[str, bytes]:
         user = self._user(token)
         if user["auth"]["accessToken"]["role"] == "read":
             raise PermissionError("403 Forbidden: token can't write")
-        relative = [p.relative_to(folder).as_posix() for p in folder.rglob("*") if p.is_file()]
-        chosen = filter_repo_objects(
-            relative, allow_patterns=list(ALLOW_PATTERNS), ignore_patterns=list(IGNORE_PATTERNS)
-        )
-        files = {f"{path_in_repo}/{r}": (folder / r).read_bytes() for r in chosen}
-        if self.fail_next_upload is not None:  # files sent, then failure before any PR
+        # The same rule the real client applies: only allowed, non-ignored files go.
+        chosen = list(filter_repo_objects(
+            list(files), allow_patterns=list(ALLOW_PATTERNS), ignore_patterns=list(IGNORE_PATTERNS)
+        ))  # fmt: skip
+        self.steps.append(chosen)
+        sent = {f"{path_in_repo}/{r}": (folder / r).read_bytes() for r in chosen}
+        if self.on_step is not None:
+            self.on_step(sum(len(b) for b in sent.values()))
+        if self.fail_next_upload is not None:  # files sent, then the step fails
             error, self.fail_next_upload = self.fail_next_upload, None
             raise error
-        pr = FakePr(len(self.prs) + 1, title, user["name"], files, description)
+        if self.fail_on_step is not None and len(self.steps) == self.fail_on_step:
+            self.fail_on_step = None
+            raise ConnectionError(f"connection lost during upload step {len(self.steps)}")
+        return sent
+
+    def open_pr(self, token: Token, repo_id: str, folder: Path, path_in_repo: str, title: str,
+                description: str, files: Any) -> PrRef:  # fmt: skip
+        self.calls.append("open_pr")
+        user = self._user(token)
+        sent = self._send(token, folder, path_in_repo, files)
+        pr = FakePr(len(self.prs) + 1, title, user["name"], sent, description)
         self.prs.append(pr)
         if self.create_pr_then_fail:
             self.create_pr_then_fail = False
             raise ConnectionError("connection reset after the PR was created")
         return PrRef(pr.num, f"https://hf.example/{repo_id}/discussions/{pr.num}")
+
+    def add_to_pr(self, token: Token, repo_id: str, num: int, folder: Path, path_in_repo: str,
+                  files: Any, message: str) -> None:  # fmt: skip
+        self.calls.append("add_to_pr")
+        pr = self.prs[num - 1]
+        if pr.state != "open":
+            raise PrNotFoundError(f"pull request #{num} isn't open")
+        pr.files.update(self._send(token, folder, path_in_repo, files))
+
+    def pr_files(self, token: Token, repo_id: str, num: int) -> set[str]:
+        self.calls.append("pr_files")
+        self._user(token)
+        if num > len(self.prs) or self.prs[num - 1].state == "deleted":
+            raise PrNotFoundError(f"pull request #{num} not found on {repo_id}")
+        return set(self.prs[num - 1].files)
 
     def find_open_pr(self, token: Token, repo_id: str, author: str, title: str) -> PrRef | None:
         self.calls.append("find_open_pr")

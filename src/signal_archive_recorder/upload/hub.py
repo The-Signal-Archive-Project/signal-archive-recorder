@@ -53,6 +53,8 @@ class PrStatus:
 
 
 class Hub(Protocol):
+    """Sessions go up in steps: open the PR with some files, then add the rest."""
+
     def whoami(self, token: Token) -> dict[str, Any]: ...
 
     def open_pr(
@@ -63,7 +65,27 @@ class Hub(Protocol):
         path_in_repo: str,
         title: str,
         description: str,
-    ) -> PrRef: ...
+        files: Sequence[str],
+    ) -> PrRef:
+        """Open a PR containing `files` (relative to `folder`) under `path_in_repo`."""
+        ...
+
+    def add_to_pr(
+        self,
+        token: Token,
+        repo_id: str,
+        num: int,
+        folder: Path,
+        path_in_repo: str,
+        files: Sequence[str],
+        message: str,
+    ) -> None:
+        """Commit more `files` to an existing PR."""
+        ...
+
+    def pr_files(self, token: Token, repo_id: str, num: int) -> set[str]:
+        """Every path (repo-relative) in the PR's current revision."""
+        ...
 
     def find_open_pr(self, token: Token, repo_id: str, author: str, title: str) -> PrRef | None: ...
 
@@ -149,14 +171,14 @@ class HfHub:
         path_in_repo: str,
         title: str,
         description: str,
+        files: Sequence[str],
     ) -> PrRef:
         info = self._api.upload_folder(
             repo_id=repo_id,
             repo_type="dataset",
             folder_path=str(folder),
             path_in_repo=path_in_repo,
-            allow_patterns=list(ALLOW_PATTERNS),
-            ignore_patterns=list(IGNORE_PATTERNS),
+            allow_patterns=list(files),  # exact relative paths
             commit_message=title,
             commit_description=description,
             create_pr=True,
@@ -165,6 +187,33 @@ class HfHub:
         if info.pr_num is None:
             raise HubError("Hugging Face accepted the files but didn't open a pull request")
         return PrRef(int(info.pr_num), str(info.pr_url))
+
+    def add_to_pr(
+        self,
+        token: Token,
+        repo_id: str,
+        num: int,
+        folder: Path,
+        path_in_repo: str,
+        files: Sequence[str],
+        message: str,
+    ) -> None:
+        self._api.upload_folder(
+            repo_id=repo_id,
+            repo_type="dataset",
+            folder_path=str(folder),
+            path_in_repo=path_in_repo,
+            allow_patterns=list(files),
+            commit_message=message,
+            revision=f"refs/pr/{num}",
+            token=token.reveal(),
+        )
+
+    def pr_files(self, token: Token, repo_id: str, num: int) -> set[str]:
+        files = self._api.list_repo_files(
+            repo_id, repo_type="dataset", revision=f"refs/pr/{num}", token=token.reveal()
+        )
+        return set(files)
 
     def find_open_pr(self, token: Token, repo_id: str, author: str, title: str) -> PrRef | None:
         for discussion in self._api.get_repo_discussions(

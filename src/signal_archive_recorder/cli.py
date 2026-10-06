@@ -54,6 +54,7 @@ from signal_archive_recorder.metadata.builder import MetadataBuilder
 from signal_archive_recorder.modes import ModeRegistry
 from signal_archive_recorder.paths import config_dir, default_config_file, example_config
 from signal_archive_recorder.recorder import Recorder
+from signal_archive_recorder.session.cleanup import cleanup
 from signal_archive_recorder.session.storage import SessionStorage
 from signal_archive_recorder.upload.consent import CONSENT_TEXT, ConsentStore, NoConsentError
 from signal_archive_recorder.upload.hub import DEFAULT_REPO, HfHub, Hub, HubError, check_token
@@ -106,6 +107,7 @@ def _uploader(config: RecorderConfig) -> Uploader:
         _clock(),
         repo_id=config.upload.repo,
         require_decoder=config.upload.require_decoder,
+        max_bytes_per_s=config.upload.max_bytes_per_s,
     )
 
 
@@ -432,6 +434,30 @@ def _dry_run(config: RecorderConfig, uploader: Uploader, sessions: list[str]) ->
     return EXIT_UPLOAD if trouble else 0
 
 
+def cmd_cleanup(args: argparse.Namespace) -> int:
+    config = _config(args.config)
+    if not (config.max_gb or config.delete_after_days):
+        print("No limits set: add max_gb and/or delete_after_days under [storage].")
+        return 0
+    report = cleanup(
+        SessionStorage(config.storage_root),
+        now_ns=_clock().now_ns(),
+        max_bytes=int(config.max_gb * 1e9) or None,
+        delete_after_days=config.delete_after_days or None,
+        dry_run=args.dry_run,
+    )
+    verb = "Would delete" if args.dry_run else "Deleted"
+    for name in report.deleted:
+        print(f"{verb} {name} (upload confirmed)")
+    gb_freed, gb_total = report.freed_bytes / 1e9, report.total_bytes / 1e9
+    print(
+        f"{verb} {len(report.deleted)} sessions, {gb_freed:.2f} GB; archive is {gb_total:.2f} GB."
+    )
+    if report.warning:
+        print(report.warning, file=sys.stderr)
+    return 0
+
+
 def cmd_requeue(args: argparse.Namespace) -> int:
     config = _config(args.config)
     record = _uploader(config).requeue(_session_dir(config, args.session))
@@ -498,6 +524,8 @@ def build_parser() -> argparse.ArgumentParser:
     p = add("upload", cmd_upload, "upload finished sessions, one pull request each")
     p.add_argument("sessions", nargs="*")
     p.add_argument("--dry-run", action="store_true", help="show what would be sent; send nothing")
+    p = add("cleanup", cmd_cleanup, "delete confirmed uploads to stay within disk limits")
+    p.add_argument("--dry-run", action="store_true", help="show what would be deleted")
     p = add("requeue", cmd_requeue, "let a blocked, failed or missing session upload again")
     p.add_argument("session")
     add("status", cmd_status, "follow up open pull requests")

@@ -40,6 +40,12 @@ interval_s = 600
 
 [upload]
 repo = "signal-archive-project/signal-archive-intake"
+schedule = "manual"          # manual, while_recording or overnight
+overnight_window = "01:00-06:00"   # local time, for schedule = "overnight"
+max_mbps = 0                 # average upload cap in megabits/s; 0 = no cap
+
+(and under [storage]: max_gb = 0 and delete_after_days = 0 limit the archive by
+deleting only sessions whose upload is confirmed; 0 = off)
 """
 
 from __future__ import annotations
@@ -52,6 +58,7 @@ from typing import Any
 from signal_archive_recorder.audio.format import SampleFormat
 from signal_archive_recorder.clockmon.monitor import DEFAULT_SERVERS
 from signal_archive_recorder.metadata.settings import StationSettings
+from signal_archive_recorder.upload.service import Window
 
 
 class ConfigError(ValueError):
@@ -89,11 +96,20 @@ class ClockConfig:
 class UploadConfig:
     repo: str = "signal-archive-project/signal-archive-intake"
     require_decoder: bool = True
+    schedule: str = "manual"
+    overnight_window: str = "01:00-06:00"
+    max_mbps: float = 0.0
+
+    @property
+    def max_bytes_per_s(self) -> float | None:
+        return self.max_mbps * 1e6 / 8 if self.max_mbps else None
 
 
 @dataclass(frozen=True)
 class RecorderConfig:
     storage_root: Path = field(default_factory=lambda: Path("~/SignalArchive").expanduser())
+    max_gb: float = 0.0  # archive size limit (confirmed uploads only are deleted); 0 = off
+    delete_after_days: float = 0.0  # delete confirmed uploads this long after; 0 = never
     audio: AudioConfig = field(default_factory=AudioConfig)
     target_chunk_s: int = 300
     station: StationSettings = field(default_factory=StationSettings)
@@ -103,7 +119,7 @@ class RecorderConfig:
 
 
 _SECTIONS = {
-    "storage": {"root"},
+    "storage": {"root", "max_gb", "delete_after_days"},
     "audio": {"device", "sample_rate", "sample_format", "channels", "buffer_seconds", "file",
               "file_speed", "file_loop"},
     "chunking": {"target_seconds"},
@@ -111,7 +127,7 @@ _SECTIONS = {
                 "station_profile_id"},
     "wsjtx": {"enabled", "port", "bind", "group"},
     "clock": {"enabled", "interval_s", "servers"},
-    "upload": {"repo", "require_decoder"},
+    "upload": {"repo", "require_decoder", "schedule", "overnight_window", "max_mbps"},
 }  # fmt: skip
 
 
@@ -142,11 +158,25 @@ def parse_config(data: dict[str, Any], base: Path = Path()) -> RecorderConfig:
     station = data.get("station", {})
     wsjtx = data.get("wsjtx", {})
     clock = data.get("clock", {})
+    upload = data.get("upload", {})
+    storage = data.get("storage", {})
+    if upload.get("schedule", "manual") not in ("manual", "while_recording", "overnight"):
+        raise ConfigError("[upload] schedule must be manual, while_recording or overnight")
+    try:
+        Window.parse(upload.get("overnight_window", "01:00-06:00"))
+    except ValueError as exc:
+        raise ConfigError(f"[upload] overnight_window: {exc}") from None
+    for section, key in (("upload", "max_mbps"), ("storage", "max_gb"),
+                         ("storage", "delete_after_days")):  # fmt: skip
+        if float(data.get(section, {}).get(key, 0)) < 0:
+            raise ConfigError(f"[{section}] {key} can't be negative")
     if float(clock.get("interval_s", 600)) < 60:
         raise ConfigError("[clock] interval_s must be at least 60 (be kind to NTP servers)")
     try:
         return RecorderConfig(
-            storage_root=path(data.get("storage", {}).get("root", "~/SignalArchive")),
+            storage_root=path(storage.get("root", "~/SignalArchive")),
+            max_gb=float(storage.get("max_gb", 0)),
+            delete_after_days=float(storage.get("delete_after_days", 0)),
             audio=AudioConfig(
                 device=audio.get("device", ""),
                 sample_rate=audio.get("sample_rate"),
@@ -166,8 +196,11 @@ def parse_config(data: dict[str, Any], base: Path = Path()) -> RecorderConfig:
                 group=wsjtx.get("group") or None,
             ),
             upload=UploadConfig(
-                repo=data.get("upload", {}).get("repo", UploadConfig.repo),
-                require_decoder=bool(data.get("upload", {}).get("require_decoder", True)),
+                repo=upload.get("repo", UploadConfig.repo),
+                require_decoder=bool(upload.get("require_decoder", True)),
+                schedule=upload.get("schedule", "manual"),
+                overnight_window=upload.get("overnight_window", "01:00-06:00"),
+                max_mbps=float(upload.get("max_mbps", 0)),
             ),
             clock=ClockConfig(
                 enabled=bool(clock.get("enabled", True)),

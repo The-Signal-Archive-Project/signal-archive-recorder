@@ -1,5 +1,9 @@
 # Intake validator verdicts
 
+## When a session is complete
+
+The recorder uploads each session as **one PR, in several commits**: the first chunk opens the PR, each further chunk is its own commit, and the labels and `session.json` come last. An interrupted upload later resumes in the same PR. So **`session.json` appearing in the PR means the upload is complete.** The validator should wait for it, then check that every chunk listed in it is present.
+
 The intake repository (`signal-archive-project/signal-archive-intake`) receives one pull request per recording session from Signal Archive Recorder. An automated validator checks each PR and reports back as a **PR comment** with a fenced block:
 
 ````markdown

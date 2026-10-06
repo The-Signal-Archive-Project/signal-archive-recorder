@@ -390,7 +390,25 @@ Split into three PRs: **9a**, recording robustness (done below); **9b**, resumab
 - `session/disk.py` `DiskMonitor`: checks free space every minute while recording. "Low" is the larger of 1 hour at the current rate and 2 GB, and "critical" is 200 MB. It warns once per level change, and never stops recording.
 - Tests: `tests/unit/test_stage9a.py`.
 
-**Remaining for 9b and 9c:**
+**9b (done):**
+- **Resumable uploads:** one PR per session, sent in steps by `plan_steps`:
+  - the first chunk opens the PR (`Hub.open_pr(files=…)`)
+  - each further chunk is a commit to `refs/pr/N` (`Hub.add_to_pr`)
+  - the labels and `session.json` go last, so `session.json` present means complete
+
+  On retry, the PR number is kept (or an open PR is found by its title), `Hub.pr_files` says what's already there, and only the rest is sent. Verified for real against the test repo: a forced failure after step 1, then a resume, gave 3 commits, 7 of 7 files and nothing re-sent.
+- **Backoff:** each failure doubles the wait before the next automatic attempt (1 minute, 2, 4… up to 6 hours, `next_attempt_ns`). An explicit `upload SESSION` ignores it.
+- **Bandwidth cap** (`[upload] max_mbps`): a pause after each step keeps the average at or under the cap. `huggingface_hub` can't throttle single files, so bursts aren't capped.
+- **Background service** (`upload/service.py`, `[upload] schedule`):
+  - `manual`: the default; nothing runs in the background
+  - `while_recording`: during `record`, uploads finished sessions and checks PRs every 5 minutes
+  - `overnight`: the same, but only inside `overnight_window` (local time; wraps past midnight)
+
+  Problems (no consent, no login, offline) are logged once and retried.
+- **Disk limits** (`session/cleanup.py`, `[storage] max_gb` and `delete_after_days`, both off by default): only **confirmed** sessions (state `validated`) are ever deleted, oldest first. If that isn't enough, a `disk_limit` warning is raised. The service applies the limits each round, and `cleanup [--dry-run]` applies them on demand.
+- Tests: `tests/unit/test_stage9b.py` (`test_retry_backoff_and_resume`, `test_bandwidth_cap`, `test_disk_limit` and others).
+
+**Remaining for 9c:**
 
 Build:
 - Optional GPS/GPSDO as a time source (the NTP clock monitor moved forward into v0.1, Stage 7b)

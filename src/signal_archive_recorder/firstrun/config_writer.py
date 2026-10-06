@@ -38,6 +38,8 @@ def render(c: SetupChoices) -> str:
 
 [storage]
 root = {_q(c.storage_root)}   # sessions are saved here
+max_gb = 0                   # archive size limit; only confirmed uploads are deleted; 0 = off
+delete_after_days = 0        # delete confirmed uploads this many days later; 0 = never
 
 [audio]
 device = {_q(c.device)}   # see: signal-archive-recorder devices
@@ -68,6 +70,9 @@ interval_s = 600
 
 [upload]
 repo = "signal-archive-project/signal-archive-intake"
+schedule = "manual"          # manual, while_recording or overnight (uploads in the background)
+overnight_window = "01:00-06:00"   # local time, for schedule = "overnight"
+max_mbps = 0                 # average upload cap in megabits/s; 0 = no cap
 """  # fmt: skip
 
 
