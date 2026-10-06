@@ -47,6 +47,9 @@ dev = [
 [project.scripts]
 signal-archive-recorder = "signal_archive_recorder.cli:main"
 
+[project.gui-scripts]
+signal-archive-recorder-gui = "signal_archive_recorder.gui:main"
+
 [project.urls]
 Repository = "https://github.com/The-Signal-Archive-Project/signal-archive-recorder"
 

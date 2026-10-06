@@ -27,6 +27,20 @@ def config_dir() -> Path:
     return base / APP
 
 
+def log_dir() -> Path:
+    """Where log files go; SIGNAL_ARCHIVE_LOG_DIR overrides it."""
+    if override := os.environ.get("SIGNAL_ARCHIVE_LOG_DIR"):
+        return Path(override)
+    system = platform.system()
+    if system == "Windows":
+        base = Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local")
+        return base / APP / "logs"
+    if system == "Darwin":
+        return Path.home() / "Library" / "Logs" / APP
+    state = Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local" / "state")
+    return state / APP / "logs"
+
+
 def default_config_file() -> Path:
     return config_dir() / "recorder.toml"
 

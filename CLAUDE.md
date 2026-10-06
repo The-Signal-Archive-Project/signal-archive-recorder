@@ -420,6 +420,34 @@ Split into three PRs: **9a**, recording robustness (done below); **9b**, resumab
 
 **Moved later:** an optional GPS/GPSDO time source (alongside the NTP monitor of Stage 7b).
 
+### Hardening for field testing (before Stage 10)
+
+Before adding modes, FT8 through WSJT-X has to work on many stations: different OSes, sound interfaces (rig USB codecs, SignaLink, Digirig…), WSJT-X/JTDX versions, and GridTracker or JTAlert alongside. This pulls most of Stage 12 forward. Decisions (2026-10-06): Windows builds are **unsigned** for the beta (SmartScreen's "Run anyway"; apply to SignPath Foundation for v1.0); beta testers upload to the **production** intake (screening plus PR review protect it); Windows is tested **in CI only** until testers report; **macOS later**.
+
+**Record only while WSJT-X runs (owner's decision, 2026-10-06):** `[recording] start = "with_decoder"` (the default) stands by with the sound card closed and records while a decoder is up; `"always"` records from start to stop (WAV playback, future decoder-less modes). "Up" means its heartbeat/status is arriving; a Monitor-off WSJT-X still counts (screening keeps such chunks back). `station.py` `Station` holds the long-lived bus, WSJT-X listener and upload service, and runs one `Recorder` per session on its own thread. `WsjtxListener.announce()` replays the current state (SourceUp, frequency, mode, TX) into each new session. Sessions end with `decoder_closed` on Close or the 30 s heartbeat timeout. A failed session start (no sound card) is retried every 30 s and shown in the tray. A session starts only once WSJT-X's frequency and mode have been steady for 2 s (`SETTLE_S`), and a 0 Hz dial is ignored. Both come from testing with the real WSJT-X 3.0.2 on the dev laptop (Rig None): while loading its settings it reported 0 → 7.0475 → 145 → 7.0475 MHz within 0.3 s, which split the start of a session into three tiny chunks. Verified there too: WSJT-X started after the recorder (recording 7 s later, one clean chunk); WSJT-X already running (recording 2 s after the recorder, first chunk fully labelled); closing WSJT-X saves the session within 1 s; killing it saves after the 30 s timeout. Tests: `tests/unit/test_station.py`.
+
+**H1: the desktop app (done)**
+- `signal-archive-recorder tray` and `signal-archive-recorder-gui` (a `gui-scripts` entry point: no console window on Windows) run `ui/app.py` `main()`:
+  - one instance per user and settings folder (`SingleInstance`, a `QLocalServer`); a second start shows the running one's window
+  - the **setup window** on first start (`ui/setup_wizard.py`): the terminal wizard's steps and services (`firstrun.wizard.Wizard` is the environment), and nothing is saved (consent, token, config, autostart) until Finish
+  - then recording, with the status window and tray icon
+- **Review & upload** window (`ui/review_window.py`), backed by `RecorderController.finished_sessions/describe/upload`. The text is shared with the CLI (`format_screens`, `describe_result`).
+- **Start at login** (`ui/autostart.py`): `HKCU\...\Run` on Windows, an XDG autostart `.desktop` file elsewhere.
+- **Log file** (`applog.py`): always on, rotating (1 MB × 5) in `paths.log_dir()`, with tokens masked.
+- **Diagnostics** (`diagnostics.py`; the window's button and `signal-archive-recorder diagnostics`): a zip of versions, audio inputs, settings, session states and logs. It holds no audio, decodes or token; the hostname, user, home folder, callsign and grid are redacted.
+- **Clean exits:** Ctrl-C, SIGTERM (logout) and Ctrl-Break end the desktop app with the session saved (`QuitOnSignals`; a timer lets Python's signal handlers run inside Qt's loop).
+- Slow work runs off the UI thread through `ui/worker.py` `in_background`, whose results are dropped if the window that asked has been closed.
+- Tests: `tests/unit/test_hardening_h1.py`, including the setup window end to end with fakes and a real desktop-app subprocess that records from a WAV and saves its session on SIGTERM.
+
+**H2: Windows installer.** PyInstaller (one folder) plus Inno Setup: a per-user install with no admin rights, a Start-menu entry, start at login, and an uninstaller. Built by GitHub Actions on version tags. CI smoke-tests the installed app against the fake WSJT-X emitter.
+
+**H3: Linux packages.**
+- **AUR:** `signal-archive-recorder`, using Arch's packages (all in `extra` except `python-sounddevice` and `python-ntplib`, which come from the AUR).
+- **.deb:** self-contained under `/opt` (Debian and Ubuntu ship older Python libraries), depending on `libportaudio2`, `libsndfile1` and Qt's system libraries. Attached to each release and CI-tested on Debian 12/13 and Ubuntu 22.04/24.04.
+- Both get a desktop entry and an icon.
+
+**H4: the testing round.** `TESTING.md` for testers, GitHub issue templates (setup details plus the diagnostics zip), a setups-covered matrix, an announcement text, and a **v0.2.0-beta** release.
+
 ### Stage 10: More modes and sources (v0.4)
 
 This is where most multi-mode work lands. Build:

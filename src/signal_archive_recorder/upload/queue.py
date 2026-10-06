@@ -118,6 +118,24 @@ BACKOFF_BASE_S = 60.0
 BACKOFF_MAX_S = 6 * 3600.0
 
 
+def describe_result(name: str, record: UploadRecord) -> tuple[list[str], bool]:
+    """What happened to one session's upload, as lines of text, and whether it needs a look."""
+    lines = [f"{name}: kept back {kept['chunk_id']}: {'; '.join(kept['reasons'])}"
+             for kept in record.excluded]  # fmt: skip
+    if record.state is UploadState.PR_OPENED:
+        lines.append(f"{name}: pull request opened: {record.pr_url}")
+        return lines, False
+    if record.state is UploadState.VALIDATED:
+        lines.append(f"{name}: already uploaded and confirmed")
+        return lines, False
+    if record.state is UploadState.BLOCKED:
+        lines.append(f"{name}: not uploaded, problems found:")
+        lines.extend(f"  - {p}" for p in record.problems)
+        return lines, True
+    lines.append(f"{name}: {record.state.value} ({record.last_error}); will retry")
+    return lines, True
+
+
 def plan_steps(session_dir: Path) -> list[list[str]]:
     """The order a session goes up in: each chunk, then labels and session.json.
 

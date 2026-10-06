@@ -48,6 +48,9 @@ device = {_q(c.device)}   # see: signal-archive-recorder devices
 sample_format = "int24"      # int16 or int24; 16-bit sound cards fit in int24 losslessly
 buffer_seconds = 10
 
+[recording]
+start = "with_decoder"       # record only while WSJT-X is running; "always" = from start to stop
+
 [chunking]
 target_seconds = 300
 

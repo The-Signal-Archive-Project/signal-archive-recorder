@@ -17,6 +17,23 @@ All notable changes to Signal Archive Recorder. Versions follow [semantic versio
 - **Pause and resume:** pausing ends the session cleanly (`end_reason: "paused"`); resuming starts a new one.
 - **Upload now** from the window.
 
+### Recording
+- **Records only while WSJT-X is running.** Otherwise the recorder waits, ready, with the sound card closed. A session starts when WSJT-X appears and is saved when it closes or goes quiet for 30 s (`end_reason: "decoder_closed"`). Background uploads carry on in between. `[recording] start = "always"` records from start to stop as before (needed for WAV-file playback).
+- If the sound card can't be opened (unplugged, say), the recorder says why and tries again every 30 s.
+- A session starts once WSJT-X's frequency and mode have been steady for 2 s, so WSJT-X's own start-up (which briefly reports several frequencies, including 0 Hz) no longer leaves tiny chunks. A 0 Hz dial is ignored.
+
+### Desktop app
+- The tray icon is **blue** while ready and waiting for WSJT-X. Pause now also holds off recording until resumed.
+- **Setup window** on first start: terms, Hugging Face login with the permission check, audio input with a level test, station, WSJT-X and clock checks. Nothing is saved until Finish.
+- **Review & upload** window: what each session would share, the radio-audio checks, and upload buttons.
+- **Start when I log in** (Windows and Linux), and only one copy runs at a time: starting it again shows the running one.
+- **`signal-archive-recorder-gui`**, a windowed entry point (no console on Windows).
+- Ctrl-C, logging out and `kill` now end the app with the session saved.
+
+### Testing support
+- A **log file**, always on and rotated (Linux: `~/.local/state/signal-archive-recorder/logs`, Windows: `%LOCALAPPDATA%\signal-archive-recorder\logs`), with tokens masked.
+- **Diagnostics** zip for bug reports (`Save diagnostics...` or `signal-archive-recorder diagnostics`): versions, audio inputs, settings, session states and logs, with names redacted and no audio or token.
+
 ### Project
 - The dependency license check understands SPDX expressions, so a dependency offered under a choice of licenses (such as Qt for Python's LGPL-3.0 or GPL) passes when one acceptable option exists.
 

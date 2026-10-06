@@ -40,6 +40,7 @@ from pathlib import Path
 from types import FrameType
 
 from signal_archive_recorder import __version__
+from signal_archive_recorder.applog import setup_logging
 from signal_archive_recorder.audio.device import (
     DeviceInfo,
     DeviceUnavailableError,
@@ -49,19 +50,26 @@ from signal_archive_recorder.audio.sound_server import native_rate
 from signal_archive_recorder.clockmon.monitor import ntplib_probe
 from signal_archive_recorder.config import ConfigError, RecorderConfig, load_config
 from signal_archive_recorder.core.clock import Clock, SystemClock
+from signal_archive_recorder.diagnostics import build as build_diagnostics
 from signal_archive_recorder.firstrun.devices import rank
 from signal_archive_recorder.firstrun.wizard import SetupCancelled, TerminalPrompter, Wizard
 from signal_archive_recorder.metadata.builder import MetadataBuilder
 from signal_archive_recorder.modes import ModeRegistry
-from signal_archive_recorder.paths import config_dir, default_config_file, example_config
-from signal_archive_recorder.recorder import Recorder
+from signal_archive_recorder.paths import config_dir, default_config_file, example_config, log_dir
+from signal_archive_recorder.recorder import RunSummary
 from signal_archive_recorder.session.cleanup import cleanup
-from signal_archive_recorder.session.storage import SessionStorage
+from signal_archive_recorder.session.storage import SessionDir, SessionStorage
+from signal_archive_recorder.station import Station
 from signal_archive_recorder.upload.consent import CONSENT_TEXT, ConsentStore, NoConsentError
 from signal_archive_recorder.upload.hub import DEFAULT_REPO, HfHub, Hub, HubError, check_token
-from signal_archive_recorder.upload.queue import NotLoggedInError, Uploader, UploadState
+from signal_archive_recorder.upload.queue import (
+    NotLoggedInError,
+    Uploader,
+    UploadState,
+    describe_result,
+)
 from signal_archive_recorder.upload.review import ReviewError, format_review, review
-from signal_archive_recorder.upload.screening import screen_session
+from signal_archive_recorder.upload.screening import format_screens, screen_session
 from signal_archive_recorder.upload.token import KeyringUnavailableError, Token, TokenStore
 
 log = logging.getLogger("signal_archive_recorder")
@@ -139,21 +147,29 @@ GUI_HINT = (
 
 
 def cmd_tray(args: argparse.Namespace) -> int:
+    """The desktop app: setup window on first start, then recording in the tray."""
     path: Path = args.config or default_config_file()
-    if not path.exists():
-        hint = "Run `signal-archive-recorder setup` first."
-        print(f"No configuration yet ({path}). {hint}", file=sys.stderr)
-        return EXIT_CONFIG
     try:
-        from signal_archive_recorder.ui.app import run
+        from signal_archive_recorder.ui.app import main as gui_main
     except ImportError:
         print(GUI_HINT, file=sys.stderr)
         return EXIT_CONFIG
     from signal_archive_recorder.ui.controller import RecorderController
 
-    config = _with_consent(_config(path))
-    controller = RecorderController(config)
-    return run(controller, recordings=config.storage_root / "sessions", settings=path)
+    def diagnostics(out: Path) -> Path:
+        storage: Path | None = None
+        with contextlib.suppress(Exception):  # broken settings are worth reporting too
+            storage = load_config(path).storage_root / "sessions"
+        return build_diagnostics(out, config_path=path, logs=log_dir(), sessions=storage,
+                                 devices=devices_text)  # fmt: skip
+
+    return gui_main(
+        path,
+        setup_env=build_wizard,
+        load=lambda p: _with_consent(_config(p)),
+        make_controller=RecorderController,
+        diagnostics=diagnostics,
+    )
 
 
 def cmd_record(args: argparse.Namespace) -> int:
@@ -167,18 +183,34 @@ def cmd_record(args: argparse.Namespace) -> int:
     for name in ("SIGINT", "SIGTERM", "SIGBREAK"):  # SIGBREAK: Ctrl-Break on Windows
         if hasattr(signal, name):
             signal.signal(getattr(signal, name), handler)
-    recorder = Recorder(config)
+
+    def on_session(started: SessionDir | None, ended: RunSummary | None) -> None:
+        if started is not None:
+            print(f"recording to {started.path} (Ctrl-C to stop)", flush=True)
+        if ended is not None:
+            print(
+                f"saved {len(ended.chunks)} chunks to {ended.session.path} "
+                f"({ended.capture.lost_frames} frames lost)",
+                flush=True,
+            )
+
+    station = Station(config, on_session=on_session)
     try:
-        session = recorder.start()
+        station.start()
     except DeviceUnavailableError as exc:
         print(f"audio device: {exc}", file=sys.stderr)
         return EXIT_DEVICE
-    print(f"recording to {session.path} (Ctrl-C to stop)", flush=True)
+    if station.last_error:
+        print(station.last_error, file=sys.stderr, flush=True)
+    if not station.always:
+        print(
+            "Ready: recording starts when WSJT-X is running, and stops when it closes "
+            "(Ctrl-C to quit).",
+            flush=True,
+        )
     while not stop.wait(0.5):
         pass
-    summary = recorder.stop(reason="signal")
-    print(f"saved {len(summary.chunks)} chunks to {summary.session.path} "
-          f"({summary.capture.lost_frames} frames lost)", flush=True)  # fmt: skip
+    station.stop(reason="signal")
     return 0
 
 
@@ -271,21 +303,17 @@ def cmd_init(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_devices(args: argparse.Namespace) -> int:
-    try:
-        devices = SoundDeviceBackend().input_devices()
-    except (DeviceUnavailableError, OSError) as exc:
-        print(f"audio system unavailable: {exc}", file=sys.stderr)
-        return EXIT_DEVICE
+def devices_text(show_all: bool = False) -> str:
+    """The audio inputs, recommended first (raises if the audio system is unavailable)."""
+    devices = SoundDeviceBackend().input_devices()
 
     def line(d: DeviceInfo) -> str:
         rate = native_rate(d)  # the sound server's real rate for pipewire/pulse/default
         return f"{d.name}  [{d.host_api}, {d.max_input_channels} ch, {rate} Hz]"
 
-    if args.all:
-        for d in devices:
-            print(line(d))
-        return 0
+    if show_all:
+        return "\n".join(line(d) for d in devices)
+    lines = []
     ranked = rank(devices, platform.system())
     groups = (
         ("Recommended:", [c for c in ranked if c.recommended]),
@@ -293,14 +321,36 @@ def cmd_devices(args: argparse.Namespace) -> int:
     )
     for heading, group in groups:
         if group:
-            print(heading)
+            lines.append(heading)
         for c in group:
-            print(f"  {line(c.device)}")
-            for reason in c.reasons:
-                print(f"      {reason}")
+            lines.append(f"  {line(c.device)}")
+            lines.extend(f"      {reason}" for reason in c.reasons)
     hidden = len(devices) - len(ranked)
     if hidden:
-        print(f"({hidden} system-plumbing entries hidden; --all shows everything)")
+        lines.append(f"({hidden} system-plumbing entries hidden; --all shows everything)")
+    return "\n".join(lines)
+
+
+def cmd_devices(args: argparse.Namespace) -> int:
+    try:
+        text = devices_text(args.all)
+    except (DeviceUnavailableError, OSError) as exc:
+        print(f"audio system unavailable: {exc}", file=sys.stderr)
+        return EXIT_DEVICE
+    if text:
+        print(text)
+    return 0
+
+
+def cmd_diagnostics(args: argparse.Namespace) -> int:
+    path: Path = args.config or default_config_file()
+    storage: Path | None = None
+    with contextlib.suppress(Exception):
+        storage = load_config(path).storage_root / "sessions"
+    out = build_diagnostics(args.out, config_path=path, logs=log_dir(), sessions=storage,
+                            devices=devices_text)  # fmt: skip
+    print(f"Diagnostics saved to {out}")
+    print("It holds no audio or token, and your names are redacted. Attach it to your report.")
     return 0
 
 
@@ -363,15 +413,10 @@ def cmd_review(args: argparse.Namespace) -> int:
     registry = ModeRegistry.load_default()
     for session_dir in targets:
         print(format_review(review(session_dir)))
-        print("  Radio-audio checks:")
-        for s in screen_session(
+        screens = screen_session(
             session_dir, registry, require_decoder=config.upload.require_decoder
-        ):
-            mark = "ok      " if s.eligible else "KEEP BACK"
-            evidence = f"{s.decodes_visible}/{s.decodes_checked} decodes found in the audio"
-            print(f"    {mark} {s.chunk_id}  ({evidence})")
-            for note in s.reasons + s.warnings:
-                print(f"             - {note}")
+        )
+        print("\n".join(format_screens(screens)))
         print()
     return 0
 
@@ -411,17 +456,9 @@ def cmd_upload(args: argparse.Namespace) -> int:
         print("Nothing to upload.")
     trouble = False
     for session_dir, record in results:
-        for kept in record.excluded:
-            print(f"{session_dir.name}: kept back {kept['chunk_id']}: {'; '.join(kept['reasons'])}")
-        if record.state is UploadState.PR_OPENED:
-            print(f"{session_dir.name}: pull request opened: {record.pr_url}")
-        elif record.state is UploadState.BLOCKED:
-            trouble = True
-            print(f"{session_dir.name}: not uploaded, problems found:")
-            print("".join(f"  - {p}\n" for p in record.problems), end="")
-        else:
-            trouble = True
-            print(f"{session_dir.name}: {record.state.value} ({record.last_error}); will retry")
+        lines, needs_look = describe_result(session_dir.name, record)
+        print("\n".join(lines))
+        trouble = trouble or needs_look
     return EXIT_UPLOAD if trouble else 0
 
 
@@ -539,7 +576,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--device", help="audio input name (default: ask)")
     p.add_argument("--force", action="store_true", help="replace an existing file")
     add("record", cmd_record, "record until Ctrl-C")
-    add("tray", cmd_tray, "record with a status window and tray icon (needs the gui extra)")
+    add("tray", cmd_tray, "the desktop app: setup window, then recording in the tray (gui extra)")
     p = add("devices", cmd_devices, "list audio inputs, recommended first")
     p.add_argument("--all", action="store_true", help="every entry, unranked")
     p = add("consent", cmd_consent, "read and accept the contribution terms")
@@ -561,15 +598,15 @@ def build_parser() -> argparse.ArgumentParser:
     p = add("requeue", cmd_requeue, "let a blocked, failed or missing session upload again")
     p.add_argument("session")
     add("status", cmd_status, "follow up open pull requests")
+    p = add("diagnostics", cmd_diagnostics, "save a diagnostics zip to attach to a bug report")
+    p.add_argument("--out", type=Path, default=Path("signal-archive-diagnostics.zip"))
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    logging.basicConfig(
-        level=logging.DEBUG if args.verbose else logging.INFO,
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-    )
+    setup_logging(args.verbose)
+    log.debug("signal-archive-recorder %s: %s", __version__, args.func.__name__)
     try:
         result: int = args.func(args)
     except ConfigError as exc:

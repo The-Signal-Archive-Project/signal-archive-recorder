@@ -105,6 +105,9 @@ class UploadConfig:
         return self.max_mbps * 1e6 / 8 if self.max_mbps else None
 
 
+START_MODES = ("with_decoder", "always")
+
+
 @dataclass(frozen=True)
 class RecorderConfig:
     storage_root: Path = field(default_factory=lambda: Path("~/SignalArchive").expanduser())
@@ -116,6 +119,9 @@ class RecorderConfig:
     wsjtx: WsjtxConfig = field(default_factory=WsjtxConfig)
     clock: ClockConfig = field(default_factory=ClockConfig)
     upload: UploadConfig = field(default_factory=UploadConfig)
+    # with_decoder: stand by, and record only while a decoder (WSJT-X) is running.
+    # always: record from start to stop (WAV playback, decoder-less modes).
+    start: str = "with_decoder"
 
 
 _SECTIONS = {
@@ -128,6 +134,7 @@ _SECTIONS = {
     "wsjtx": {"enabled", "port", "bind", "group"},
     "clock": {"enabled", "interval_s", "servers"},
     "upload": {"repo", "require_decoder", "schedule", "overnight_window", "max_mbps"},
+    "recording": {"start"},
 }  # fmt: skip
 
 
@@ -170,6 +177,14 @@ def parse_config(data: dict[str, Any], base: Path = Path()) -> RecorderConfig:
                          ("storage", "delete_after_days")):  # fmt: skip
         if float(data.get(section, {}).get(key, 0)) < 0:
             raise ConfigError(f"[{section}] {key} can't be negative")
+    start = data.get("recording", {}).get("start", "with_decoder")
+    if start not in START_MODES:
+        raise ConfigError('[recording] start must be "with_decoder" or "always"')
+    if start == "with_decoder" and not wsjtx.get("enabled", True):
+        raise ConfigError(
+            '[recording] start = "with_decoder" waits for WSJT-X, but [wsjtx] is disabled. '
+            'Enable it, or set start = "always".'
+        )
     if float(clock.get("interval_s", 600)) < 60:
         raise ConfigError("[clock] interval_s must be at least 60 (be kind to NTP servers)")
     try:
@@ -207,6 +222,7 @@ def parse_config(data: dict[str, Any], base: Path = Path()) -> RecorderConfig:
                 interval_s=float(clock.get("interval_s", 600)),
                 servers=tuple(clock.get("servers", DEFAULT_SERVERS)),
             ),
+            start=start,
         )
     except (TypeError, ValueError) as exc:
         raise ConfigError(str(exc)) from exc

@@ -3,10 +3,13 @@
 # If a copy of the MPL was not distributed with this file, You can obtain one at
 # https://mozilla.org/MPL/2.0/.
 import os
+import tempfile
 
 import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")  # Qt tests run without a display
+# Log files from CLI runs in tests never land in the real per-user log folder.
+os.environ.setdefault("SIGNAL_ARCHIVE_LOG_DIR", tempfile.mkdtemp(prefix="sar-test-logs-"))
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:

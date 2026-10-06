@@ -4,23 +4,34 @@
 # https://mozilla.org/MPL/2.0/.
 """The status window and tray icon (Qt, via PySide6 under the LGPL-3.0).
 
-Small on purpose: a checklist, a level meter, pause/resume, "mark this" notes, an
-"upload now" button and shortcuts to the recordings and settings. Once it's
-green, the operator can forget about it. Everything it shows comes from
+Small on purpose: a checklist, a level meter, pause/resume, "mark this" notes,
+review & upload, diagnostics and shortcuts to the recordings and settings. Once
+it's green, the operator can forget about it. Everything it shows comes from
 RecorderController.snapshot(); it decides nothing itself.
+
+`main()` is the whole desktop app: one instance per user, the setup wizard on
+first start, then recording with the window and tray icon.
 """
 
 from __future__ import annotations
 
+import contextlib
+import getpass
+import hashlib
 import logging
-import threading
+import signal
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Protocol
 
-from PySide6.QtCore import QObject, Qt, QTimer, QUrl, Signal
+from PySide6.QtCore import Qt, QTimer, QUrl
 from PySide6.QtGui import QAction, QCloseEvent, QColor, QDesktopServices, QIcon, QPainter, QPixmap
+from PySide6.QtNetwork import QLocalServer, QLocalSocket
 from PySide6.QtWidgets import (
     QApplication,
+    QCheckBox,
+    QDialog,
+    QFileDialog,
     QGridLayout,
     QHBoxLayout,
     QInputDialog,
@@ -36,13 +47,24 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from signal_archive_recorder.paths import config_dir
+from signal_archive_recorder.ui.autostart import Autostart
+from signal_archive_recorder.ui.controller import SessionRow
 from signal_archive_recorder.ui.health import CheckItem, HealthInputs, checklist, tray_state
+from signal_archive_recorder.ui.review_window import ReviewWindow
 
 log = logging.getLogger(__name__)
 
-COLOURS = {"green": "#2e9d4a", "yellow": "#d9a400", "red": "#c8322b", "grey": "#8a8f98"}
+COLOURS = {
+    "green": "#2e9d4a",
+    "yellow": "#d9a400",
+    "red": "#c8322b",
+    "grey": "#8a8f98",
+    "blue": "#2f6fd6",
+}
 LEVEL_COLOURS = {"ok": "green", "warn": "yellow", "bad": "red", "off": "grey"}
 TRAY_TEXT = {
+    "blue": "Ready: recording starts when WSJT-X runs",
     "green": "Recording; all good",
     "yellow": "Recording; something needs a look",
     "red": "Not recording",
@@ -68,7 +90,11 @@ class Controller(Protocol):
 
     def snapshot(self) -> HealthInputs: ...
 
-    def upload_now(self) -> Any: ...
+    def finished_sessions(self) -> list[SessionRow]: ...
+
+    def describe(self, session_id: str) -> str: ...
+
+    def upload(self, session_ids: list[str]) -> list[str]: ...
 
 
 def dot(colour: str, size: int = 16) -> QPixmap:
@@ -83,16 +109,23 @@ def dot(colour: str, size: int = 16) -> QPixmap:
     return pixmap
 
 
-class _Done(QObject):
-    finished = Signal(str)
-
-
 class StatusWindow(QWidget):
-    def __init__(self, controller: Controller, *, recordings: Path, settings: Path) -> None:
+    def __init__(
+        self,
+        controller: Controller,
+        *,
+        recordings: Path,
+        settings: Path,
+        diagnostics: Callable[[Path], Path] | None = None,
+        autostart: Autostart | None = None,
+    ) -> None:
         super().__init__()
         self.controller = controller
         self._recordings = recordings
         self._settings = settings
+        self._diagnostics = diagnostics
+        self._autostart = autostart
+        self.review: ReviewWindow | None = None
         self.state = "red"
         self.setWindowTitle("Signal Archive Recorder")
         self.setMinimumWidth(460)
@@ -137,15 +170,27 @@ class StatusWindow(QWidget):
 
         self.pause_button = QPushButton("Pause")
         self.pause_button.clicked.connect(self.toggle_pause)
-        self.upload_button = QPushButton("Upload now")
-        self.upload_button.clicked.connect(self.upload_now)
+        self.upload_button = QPushButton("Review && upload...")
+        self.upload_button.clicked.connect(self.open_review)
         open_button = QPushButton("Open recordings")
         open_button.clicked.connect(lambda: self._open(self._recordings))
-        settings_button = QPushButton("Settings")
-        settings_button.clicked.connect(lambda: self._open(self._settings))
         buttons = QHBoxLayout()
-        for b in (self.pause_button, self.upload_button, open_button, settings_button):
+        for b in (self.pause_button, self.upload_button, open_button):
             buttons.addWidget(b)
+        settings_button = QPushButton("Settings file")
+        settings_button.clicked.connect(lambda: self._open(self._settings))
+        self.diagnostics_button = QPushButton("Save diagnostics...")
+        self.diagnostics_button.clicked.connect(self.save_diagnostics)
+        self.diagnostics_button.setEnabled(diagnostics is not None)
+        self.autostart_box = QCheckBox("Start when I log in")
+        if autostart is not None:
+            self.autostart_box.setChecked(autostart.enabled())
+            self.autostart_box.toggled.connect(self.set_autostart)
+        else:
+            self.autostart_box.setEnabled(False)
+        more = QHBoxLayout()
+        for w in (settings_button, self.diagnostics_button, self.autostart_box):
+            more.addWidget(w)
         self.message = QLabel()
         self.message.setWordWrap(True)
 
@@ -158,10 +203,9 @@ class StatusWindow(QWidget):
         layout.addLayout(presets)
         layout.addWidget(self.notes)
         layout.addLayout(buttons)
+        layout.addLayout(more)
         layout.addWidget(self.message)
 
-        self._done = _Done()
-        self._done.finished.connect(self._upload_finished)
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.refresh)
         self.timer.start(1000)
@@ -189,10 +233,12 @@ class StatusWindow(QWidget):
         try:
             if self.controller.paused:
                 self.controller.resume()
-                self.message.setText("Recording again (a new session).")
+                self.message.setText("Resumed: recording while WSJT-X runs (a new session).")
             else:
                 self.controller.pause()
-                self.message.setText("Paused: the session was saved.")
+                self.message.setText(
+                    "Paused: the session was saved, and nothing is recorded until you resume."
+                )
         except Exception as exc:
             self.message.setText(f"Couldn't do that: {exc}")
         self.refresh()
@@ -208,24 +254,39 @@ class StatusWindow(QWidget):
         self.mark(self.note_input.text())
         self.note_input.clear()
 
-    def upload_now(self) -> None:
-        self.upload_button.setEnabled(False)
-        self.message.setText("Uploading finished sessions...")
+    def open_review(self) -> None:
+        if self.review is None:
+            self.review = ReviewWindow(self.controller, self)
+        self.review.show()
+        self.review.raise_()
+        self.review.activateWindow()
 
-        def work() -> None:
-            try:
-                results = self.controller.upload_now()
-                text = f"Upload done ({len(results)} sessions)."
-            except Exception as exc:
-                text = f"Upload didn't run: {exc}"
-            self._done.finished.emit(text)
+    def save_diagnostics(self) -> None:
+        if self._diagnostics is None:
+            return
+        default = str(Path.home() / "signal-archive-diagnostics.zip")
+        target, _ = QFileDialog.getSaveFileName(self, "Save diagnostics", default, "Zip (*.zip)")
+        if target:
+            self.write_diagnostics(Path(target))
 
-        threading.Thread(target=work, name="upload-now", daemon=True).start()
+    def write_diagnostics(self, target: Path) -> None:
+        assert self._diagnostics is not None
+        try:
+            saved = self._diagnostics(target)
+        except Exception as exc:
+            self.message.setText(f"Couldn't save diagnostics: {exc}")
+            return
+        self.message.setText(
+            f"Diagnostics saved to {saved}. Attach it to your report; it "
+            "holds no audio or token, and your names are redacted."
+        )
 
-    def _upload_finished(self, text: str) -> None:
-        self.upload_button.setEnabled(True)
-        self.message.setText(text)
-        self.refresh()
+    def set_autostart(self, on: bool) -> None:
+        assert self._autostart is not None
+        try:
+            self._autostart.enable() if on else self._autostart.disable()
+        except OSError as exc:
+            self.message.setText(f"Couldn't change start at login: {exc}")
 
     def _open(self, path: Path) -> None:
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
@@ -244,9 +305,11 @@ class Tray:
         self.pause.triggered.connect(window.toggle_pause)
         note = QAction("Mark this...", menu)
         note.triggered.connect(self._mark)
+        review = QAction("Review && upload...", menu)
+        review.triggered.connect(window.open_review)
         quit_action = QAction("Quit (saves the session)", menu)
         quit_action.triggered.connect(quit_app)
-        for action in (show, self.pause, note, quit_action):
+        for action in (show, self.pause, note, review, quit_action):
             menu.addAction(action)
         self._menu = menu
         self.icon.setContextMenu(menu)
@@ -283,16 +346,108 @@ class _Window(StatusWindow):
             super().closeEvent(event)
 
 
-def run(controller: Any, *, recordings: Path, settings: Path) -> int:
+class QuitOnSignals:
+    """Ctrl-C, SIGTERM (logout, `kill`, systemd) and Ctrl-Break end the app cleanly.
+
+    Python only runs signal handlers between bytecodes, which never happens while
+    Qt's event loop is waiting, so a timer hands control back to Python regularly.
+    """
+
+    def __init__(self, app: QApplication) -> None:
+        self.reason: str | None = None
+        self._app = app
+        self._timer = QTimer(app)
+        self._timer.timeout.connect(lambda: None)
+        self._timer.start(250)
+        for name in ("SIGINT", "SIGTERM", "SIGBREAK"):
+            if hasattr(signal, name):
+                with contextlib.suppress(ValueError, OSError):  # not on the main thread
+                    signal.signal(getattr(signal, name), self._handle)
+
+    def _handle(self, signum: int, frame: Any) -> None:
+        log.info("signal %s: stopping", signum)
+        self.reason = "signal"
+        QTimer.singleShot(0, self._quit)
+
+    def _quit(self) -> None:
+        for widget in self._app.topLevelWidgets():  # a dialog (setup) runs its own loop
+            if isinstance(widget, QDialog) and widget.isVisible():
+                widget.reject()
+        self._app.quit()
+
+
+class SingleInstance:
+    """One recorder per user: a second start just shows the first one's window."""
+
+    def __init__(self, name: str | None = None) -> None:
+        # Per user and settings folder, so tests (and a second profile) don't collide.
+        who = f"{getpass.getuser()}|{config_dir()}"
+        self.name = (
+            name or f"signal-archive-recorder-{hashlib.sha256(who.encode()).hexdigest()[:12]}"
+        )
+        self.server = QLocalServer()
+        self.on_show: Callable[[], None] = lambda: None
+
+    def acquire(self) -> bool:
+        """True if this is the only instance; otherwise asks the running one to show itself."""
+        probe = QLocalSocket()
+        probe.connectToServer(self.name)
+        if probe.waitForConnected(500):
+            probe.write(b"show\n")
+            probe.waitForBytesWritten(500)
+            probe.disconnectFromServer()
+            return False
+        QLocalServer.removeServer(self.name)  # left over from a crash
+        if not self.server.listen(self.name):
+            log.warning("single-instance guard unavailable: %s", self.server.errorString())
+            return True
+        self.server.newConnection.connect(self._connection)
+        return True
+
+    def _connection(self) -> None:
+        while (conn := self.server.nextPendingConnection()) is not None:
+            conn.readyRead.connect(conn.readAll)
+            conn.disconnected.connect(conn.deleteLater)
+            self.on_show()
+
+    def release(self) -> None:
+        self.server.close()
+
+
+def run(
+    controller: Any,
+    *,
+    recordings: Path,
+    settings: Path,
+    diagnostics: Callable[[Path], Path] | None = None,
+    autostart: Autostart | None = None,
+    instance: SingleInstance | None = None,
+) -> int:
     app = QApplication.instance() or QApplication([])
     assert isinstance(app, QApplication)
     app.setApplicationName("Signal Archive Recorder")
+    quit_signals = QuitOnSignals(app)
     try:
         controller.start()
     except Exception as exc:
+        log.exception("couldn't start recording")
         QMessageBox.critical(None, "Signal Archive Recorder", f"Couldn't start recording:\n{exc}")
         return 3
-    window = _Window(controller, recordings=recordings, settings=settings)
+    window = _Window(
+        controller,
+        recordings=recordings,
+        settings=settings,
+        diagnostics=diagnostics,
+        autostart=autostart,
+    )
+
+    def show() -> None:
+        window.showNormal()
+        window.raise_()
+        window.activateWindow()
+
+    if instance is not None:
+        instance.on_show = show
 
     def quit_app() -> None:
         controller.stop(reason="quit")
@@ -303,9 +458,56 @@ def run(controller: Any, *, recordings: Path, settings: Path) -> int:
         window.has_tray = True
         tray = Tray(window, quit_app)
         app.setQuitOnLastWindowClosed(False)
-    else:
-        app.aboutToQuit.connect(lambda: controller.stop(reason="quit"))
     window.show()
     result = app.exec()
+    # However the loop ended (Quit, the last window closed, a signal, logging out of
+    # the desktop), the session is finished and saved. Stopping twice is harmless.
+    controller.stop(reason=quit_signals.reason or "quit")
     del tray
     return int(result)
+
+
+def main(
+    config_path: Path,
+    *,
+    setup_env: Callable[[], Any],
+    load: Callable[[Path], Any],
+    make_controller: Callable[[Any], Any],
+    diagnostics: Callable[[Path], Path] | None = None,
+) -> int:
+    """The desktop app: set up if needed, then record in the tray."""
+    from signal_archive_recorder.ui.setup_wizard import SetupWizard
+
+    app = QApplication.instance() or QApplication([])
+    assert isinstance(app, QApplication)
+    app.setApplicationName("Signal Archive Recorder")
+    app.setWindowIcon(QIcon(dot("green", 64)))
+    QuitOnSignals(app)  # also during setup
+    instance = SingleInstance()
+    if not instance.acquire():
+        log.info("already running; asked it to show its window")
+        return 0
+    try:
+        if not config_path.exists():
+            wizard = SetupWizard(setup_env(), config_path)
+            if wizard.exec() != QDialog.DialogCode.Accepted:
+                return 0
+        try:
+            config = load(config_path)
+        except Exception as exc:
+            QMessageBox.critical(
+                None,
+                "Signal Archive Recorder",
+                f"There's a problem with the settings in {config_path}:\n{exc}",
+            )
+            return 2
+        return run(
+            make_controller(config),
+            recordings=config.storage_root / "sessions",
+            settings=config_path,
+            diagnostics=diagnostics,
+            autostart=Autostart(),
+            instance=instance,
+        )
+    finally:
+        instance.release()

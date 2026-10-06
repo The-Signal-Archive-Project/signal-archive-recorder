@@ -237,6 +237,7 @@ def test_sigterm_mid_chunk(tmp_path: Path) -> None:
         f"[storage]\nroot = {json.dumps(str(root))}\n"
         f'[audio]\nfile = {json.dumps(str(wav))}\nsample_format = "int16"\n'
         "[wsjtx]\nport = 0\n[clock]\nenabled = false\n"  # no network in tests
+        '[recording]\nstart = "always"\n'  # a WAV file: nothing to wait for
     )
     flags = subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0  # type: ignore[attr-defined]
     proc = subprocess.Popen(

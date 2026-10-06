@@ -5,9 +5,10 @@
 """What the tray colour and the status checklist say, as plain functions.
 
 Tray colours:
+- blue: ready, waiting for WSJT-X (the sound card is closed; nothing is recorded)
 - green: recording, everything healthy
-- yellow: recording, with something worth a look (no WSJT-X, clipping, clock off...)
-- red: not recording, or a problem that will stop it (disk almost full)
+- yellow: something worth a look (WSJT-X stopped sending, clipping, clock off...)
+- red: a problem that stops recording (no sound card, disk almost full, port taken)
 - grey: paused by the operator
 """
 
@@ -17,8 +18,8 @@ from dataclasses import dataclass, field
 from typing import Literal
 
 Level = Literal["ok", "warn", "bad", "off"]
-TrayState = Literal["green", "yellow", "red", "grey"]
-WsjtxState = Literal["up", "down", "never", "disabled"]
+TrayState = Literal["blue", "green", "yellow", "red", "grey"]
+WsjtxState = Literal["up", "down", "never", "disabled", "busy"]
 DiskState = Literal["ok", "low", "critical"]
 SILENT_DBFS = -70.0
 
@@ -26,7 +27,9 @@ SILENT_DBFS = -70.0
 @dataclass
 class HealthInputs:
     recording: bool = False
+    standby: bool = False  # waiting for WSJT-X, ready to record
     paused: bool = False
+    problem: str | None = None  # why recording couldn't start (e.g. the sound card)
     peak_dbfs: float | None = None  # None: no audio yet
     clipped: int = 0
     frames_lost: int = 0
@@ -53,6 +56,10 @@ def checklist(h: HealthInputs) -> list[CheckItem]:
         items.append(CheckItem("Recording", "off", "paused"))
     elif h.recording:
         items.append(CheckItem("Recording", "ok", f"session {h.session}" if h.session else "on"))
+    elif h.problem:
+        items.append(CheckItem("Recording", "bad", h.problem))
+    elif h.standby:
+        items.append(CheckItem("Recording", "off", "ready: starts when WSJT-X is running"))
     else:
         items.append(CheckItem("Recording", "bad", "not recording"))
 
@@ -71,6 +78,18 @@ def checklist(h: HealthInputs) -> list[CheckItem]:
 
     if h.wsjtx == "disabled":
         items.append(CheckItem("WSJT-X", "off", "not used"))
+    elif h.wsjtx == "busy":
+        level: Level = "bad" if h.standby else "warn"
+        items.append(
+            CheckItem(
+                "WSJT-X",
+                level,
+                "another program has its UDP port (GridTracker "
+                "or JTAlert?): use multicast to share it",
+            )
+        )
+    elif h.wsjtx != "up" and h.standby:
+        items.append(CheckItem("WSJT-X", "off", "not running"))
     elif h.wsjtx == "up":
         where = " ".join(x for x in (h.mode, _mhz(h.dial_hz)) if x)
         items.append(CheckItem("WSJT-X", "ok", where or "connected"))
@@ -111,7 +130,7 @@ def tray_state(h: HealthInputs) -> TrayState:
         return "red"
     if any(i.level == "warn" for i in items):
         return "yellow"
-    return "green"
+    return "blue" if h.standby and not h.recording else "green"
 
 
 def _mhz(dial_hz: int | None) -> str | None:
