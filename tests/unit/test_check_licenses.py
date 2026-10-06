@@ -1,4 +1,7 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: MPL-2.0
+# This Source Code Form is subject to the terms of the Mozilla Public License, v. 2.0.
+# If a copy of the MPL was not distributed with this file, You can obtain one at
+# https://mozilla.org/MPL/2.0/.
 import importlib.util
 from pathlib import Path
 
@@ -32,6 +35,8 @@ def test_forbidden(text: str) -> None:
     "text",
     [
         "Apache-2.0",
+        "MPL-2.0",
+        "License :: OSI Approved :: Mozilla Public License 2.0 (MPL 2.0)",
         "MIT",
         "BSD-3-Clause",
         "LGPL-3.0-or-later",

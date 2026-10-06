@@ -1,4 +1,7 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: MPL-2.0
+# This Source Code Form is subject to the terms of the Mozilla Public License, v. 2.0.
+# If a copy of the MPL was not distributed with this file, You can obtain one at
+# https://mozilla.org/MPL/2.0/.
 """Recover `.flac.partial` files left behind when the recorder stopped mid-chunk.
 
 A crashed writer leaves complete FLAC frames followed by at most one cut-off frame,

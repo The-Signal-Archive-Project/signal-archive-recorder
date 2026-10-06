@@ -83,4 +83,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request. All commit
 
 ## License
 
-Apache-2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE). Signal Archive Recorder is an independent project. It works with WSJT-X and other programs only by reading their network output, and contains none of their code.
+The software is licensed under the [Mozilla Public License 2.0](LICENSE) (MPL-2.0). You can use it, including inside closed-source products, but if you distribute changed versions of its files, you must publish those changes under the MPL too. See also [NOTICE](NOTICE). Recordings contributed to the Signal Archive Project are licensed separately, under CC BY 4.0. Signal Archive Recorder is an independent project. It works with WSJT-X and other programs only by reading their network output, and contains none of their code.
