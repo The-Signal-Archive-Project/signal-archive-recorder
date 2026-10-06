@@ -2,7 +2,7 @@
 
 Station-side recorder for the **Signal Archive Project**. It captures bit-exact receive audio from your rig, collects metadata automatically from software you already run (starting with WSJT-X for FT8), and uploads sessions to the project's open dataset.
 
-> **Status:** v0.1.1 (alpha). It records, labels and uploads FT8/FT4 sessions, with a desktop app (window and tray icon) or from the terminal. Expect changes before 1.0; see the [changelog](CHANGELOG.md). The build plan is in [CLAUDE.md](CLAUDE.md).
+> **Status:** v0.1.2 (alpha). It records, labels and uploads FT8/FT4 sessions, with a desktop app (window and tray icon) or from the terminal. Expect changes before 1.0; see the [changelog](CHANGELOG.md). The build plan is in [CLAUDE.md](CLAUDE.md).
 
 ## Principles
 
@@ -18,10 +18,10 @@ FT8 comes first. Other digital modes (FT4, WSPR, JS8, Q65, PSK31, RTTY and more)
 You need **Python 3.11 or newer**. The recorder installs straight from this repository; [pipx](https://pipx.pypa.io/) keeps it in its own environment:
 
 ```bash
-pipx install git+https://github.com/The-Signal-Archive-Project/signal-archive-recorder@v0.1.1
+pipx install git+https://github.com/The-Signal-Archive-Project/signal-archive-recorder@v0.1.2
 ```
 
-That installs the v0.1.1 release. To get a newer release later, run the same command with its tag and `--force`. To follow the latest development version instead, leave off `@v0.1.1`. (Plain `pip install git+https://…` works too.)
+That installs the v0.1.2 release. To get a newer release later, run the same command with its tag and `--force`. To follow the latest development version instead, leave off `@v0.1.2`. (Plain `pip install git+https://…` works too.)
 
 **Linux needs two system pieces** (Windows and macOS have them built in):
 - **PortAudio**, for audio input:
@@ -92,7 +92,7 @@ Before anything is sent, the recorder checks that each chunk really is your radi
 ### Desktop app (window and tray icon)
 
 ```bash
-pipx install --force "signal-archive-recorder[gui] @ git+https://github.com/The-Signal-Archive-Project/signal-archive-recorder@v0.1.1"
+pipx install --force "signal-archive-recorder[gui] @ git+https://github.com/The-Signal-Archive-Project/signal-archive-recorder@v0.1.2"
 signal-archive-recorder tray      # or: signal-archive-recorder-gui
 ```
 
