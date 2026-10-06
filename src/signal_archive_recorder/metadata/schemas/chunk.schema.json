@@ -17,7 +17,8 @@
     "tx_intervals",
     "sources",
     "events",
-    "clock"
+    "clock",
+    "rights"
   ],
   "additionalProperties": false,
   "properties": {
@@ -541,6 +542,28 @@
               "$ref": "https://signal-archive-project.org/schemas/recorder/common/1#/$defs/clock_check"
             }
           ]
+        }
+      }
+    },
+    "rights": {
+      "type": "object",
+      "required": [
+        "license",
+        "license_url",
+        "attribution"
+      ],
+      "additionalProperties": false,
+      "description": "Also written into the FLAC file's Vorbis comments (LICENSE, COPYRIGHT, ARTIST).",
+      "properties": {
+        "license": {
+          "const": "CC-BY-4.0"
+        },
+        "license_url": {
+          "const": "https://creativecommons.org/licenses/by/4.0/"
+        },
+        "attribution": {
+          "type": "string",
+          "description": "The contributor's callsign if they chose to share it, otherwise 'Signal Archive Project contributor'"
         }
       }
     }

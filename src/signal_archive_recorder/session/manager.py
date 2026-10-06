@@ -281,7 +281,14 @@ class SessionManager:
             assert self.session is not None
             chunk.first_written = self._pos
             chunk.writer = FlacWriter(
-                self.session.flac(chunk.chunk_id), self.format, compression_level=self._compression
+                self.session.flac(chunk.chunk_id),
+                self.format,
+                compression_level=self._compression,
+                tags=self.builder.flac_tags(
+                    session_id=self.session.session_id,
+                    chunk_id=chunk.chunk_id,
+                    first_sample_ns=self._timeline.frame_to_ns(self._pos),
+                ),
             )
         chunk.writer.write(seg)
         chunk.levels.update(seg)

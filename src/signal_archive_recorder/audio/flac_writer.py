@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -34,6 +35,9 @@ CORRUPT_SUFFIX = ".corrupt"
 _SUBTYPES: dict[SampleFormat, str] = {"int16": "PCM_16", "int24": "PCM_24"}
 _READ_FRAMES = 65_536
 _HASH_BLOCK = 1 << 20
+# The Vorbis comment fields libsndfile can write (stored as TITLE=, LICENSE=, ...).
+TAG_NAMES = ("title", "copyright", "software", "artist", "comment", "date", "album", "license",
+             "tracknumber", "genre")  # fmt: skip
 
 
 class UnsupportedFormatError(ValueError):
@@ -139,7 +143,14 @@ def verify_flac(path: Path, fmt: AudioFormat, expected_md5: str | None = None) -
 class FlacWriter:
     """Write one chunk of device bytes to a verified FLAC file."""
 
-    def __init__(self, path: Path, fmt: AudioFormat, *, compression_level: int = 8) -> None:
+    def __init__(
+        self,
+        path: Path,
+        fmt: AudioFormat,
+        *,
+        compression_level: int = 8,
+        tags: Mapping[str, str] | None = None,
+    ) -> None:
         subtype = check_format(fmt)
         if not 0 <= compression_level <= 8:
             raise ValueError("FLAC compression level is 0-8")
@@ -157,6 +168,12 @@ class FlacWriter:
             format="FLAC",
             compression_level=compression_level / 8,
         )
+        # Tags go in the header, so they're set before any audio. They don't change the
+        # audio MD5, and are in place before the file's SHA-256 is computed.
+        for name, value in (tags or {}).items():
+            if name not in TAG_NAMES:
+                raise ValueError(f"FLAC tag {name!r} isn't supported")
+            setattr(self._file, name, value)
 
     @property
     def frames(self) -> int:

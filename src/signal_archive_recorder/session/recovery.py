@@ -23,6 +23,7 @@ from signal_archive_recorder.audio.flac_recovery import Recovery, recover_partia
 from signal_archive_recorder.audio.flac_writer import array_to_raw
 from signal_archive_recorder.audio.format import AudioFormat
 from signal_archive_recorder.audio.levels import LevelMeter
+from signal_archive_recorder.metadata import rights
 from signal_archive_recorder.metadata.builder import MetadataBuilder
 from signal_archive_recorder.session.storage import SessionStorage, write_json_atomic
 
@@ -75,6 +76,7 @@ def _recovered_meta(session_id: str, r: Recovery, builder: MetadataBuilder) -> d
     )
     meter = LevelMeter(fmt)
     with sf.SoundFile(str(path)) as f:
+        credited = f.artist  # the credit recorded at the time, not today's settings
         dtype = "int16" if fmt.sample_format == "int16" else "int32"
         while len(block := f.read(65_536, dtype=dtype, always_2d=True)):
             meter.update(array_to_raw(block, fmt))
@@ -110,6 +112,8 @@ def _recovered_meta(session_id: str, r: Recovery, builder: MetadataBuilder) -> d
         "sources": {},
         "events": [],
     }
+    if credited:
+        record["rights"] = {**rights.rights(builder.settings), "attribution": credited}
     return builder.chunk(record)
 
 
