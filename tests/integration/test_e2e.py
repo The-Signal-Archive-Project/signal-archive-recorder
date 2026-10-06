@@ -266,16 +266,21 @@ def test_sigterm_mid_chunk(tmp_path: Path) -> None:
     [session_dir] = (root / "sessions").iterdir()
     session = json.loads((session_dir / "session.json").read_text())
     assert session["ended_ns"] is not None and session["end_reason"] == "signal"
-    [meta_path] = (session_dir / "recordings").glob("*.meta.json")
-    chunk = json.loads(meta_path.read_text())
-    assert chunk["time"]["end_reason"] == "session_end"
-    assert chunk["audio"]["flac"]["verified"]
-    assert 1.5 * 8000 <= chunk["audio"]["sample_count"] <= 10 * 8000
-    flac = session_dir / "recordings" / chunk["audio"]["flac"]["file"]
-    assert verify_flac(flac, FMT, chunk["audio"]["flac"]["pcm_md5"]).ok
-    raw, _ = sf.read(flac, dtype="int16", always_2d=True)
-    expected = pcm.tobytes()[: len(raw) * 2]
-    assert hashlib.md5(array_to_raw(raw, FMT)).digest() == hashlib.md5(expected).digest()
+    # Real wall clock: a run that crosses a 5-minute boundary is split there, so allow two.
+    metas = sorted((session_dir / "recordings").glob("*.meta.json"))
+    chunks = [json.loads(p.read_text()) for p in metas]
+    assert 1 <= len(chunks) <= 2
+    assert [c["time"]["end_reason"] for c in chunks][-1] == "session_end"
+    assert all(c["time"]["end_reason"] == "policy" for c in chunks[:-1])
+    assert 1.5 * 8000 <= sum(c["audio"]["sample_count"] for c in chunks) <= 10 * 8000
+    audio = b""
+    for chunk in chunks:
+        assert chunk["audio"]["flac"]["verified"]
+        flac = session_dir / "recordings" / chunk["audio"]["flac"]["file"]
+        assert verify_flac(flac, FMT, chunk["audio"]["flac"]["pcm_md5"]).ok
+        raw, _ = sf.read(flac, dtype="int16", always_2d=True)
+        audio += array_to_raw(raw, FMT)
+    assert hashlib.md5(audio).digest() == hashlib.md5(pcm.tobytes()[: len(audio)]).digest()
 
 
 def test_missing_device_fails_cleanly(tmp_path: Path) -> None:

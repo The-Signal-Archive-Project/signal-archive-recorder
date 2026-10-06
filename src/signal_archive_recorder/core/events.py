@@ -130,6 +130,13 @@ class ClockChecked(Event):
     os_sync_tool: str | None = None
 
 
+@dataclass(frozen=True, kw_only=True)
+class Note(Event):
+    """A note the operator added while recording ("strong QRM", "rare DX")."""
+
+    text: str
+
+
 @dataclass(frozen=True)
 class Stamped:
     """An event as delivered by the bus: system time when published, plus sequence."""

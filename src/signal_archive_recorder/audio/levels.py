@@ -13,6 +13,7 @@ float, at or beyond +/-1.0).
 from __future__ import annotations
 
 import math
+import threading
 from dataclasses import dataclass
 
 import numpy as np
@@ -55,6 +56,25 @@ class Levels:
 
 def _db(x: float) -> float:
     return 20 * math.log10(x) if x > 0 else SILENCE_DBFS
+
+
+class LiveLevel:
+    """A capture sink for the status display: peak and RMS over the last block read."""
+
+    def __init__(self, fmt: AudioFormat) -> None:
+        self.format = fmt
+        self._lock = threading.Lock()
+        self._levels: Levels | None = None
+
+    def write(self, data: bytes, stream_frame: int) -> None:
+        meter = LevelMeter(self.format)
+        meter.update(data)
+        with self._lock:
+            self._levels = meter.snapshot()
+
+    def latest(self) -> Levels | None:
+        with self._lock:
+            return self._levels
 
 
 class LevelMeter:

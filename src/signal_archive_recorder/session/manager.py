@@ -42,6 +42,7 @@ from signal_archive_recorder.core.events import (
     Event,
     FreqChanged,
     ModeChanged,
+    Note,
     SettingChanged,
     SourceDown,
     SourceUp,
@@ -389,6 +390,8 @@ class SessionManager:
             record.update(lost_frames=e.lost_frames, reason=e.reason)
         elif isinstance(e, ClockChecked):
             record.update(self._clock_record(e, change.frame))
+        elif isinstance(e, Note):
+            record["detail"] = e.text
         return record
 
     @staticmethod

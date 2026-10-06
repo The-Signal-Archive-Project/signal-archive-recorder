@@ -28,6 +28,7 @@ from signal_archive_recorder.audio.device import (
 )
 from signal_archive_recorder.audio.file_backend import FileBackend
 from signal_archive_recorder.audio.flac_recovery import Recovery
+from signal_archive_recorder.audio.levels import LiveLevel
 from signal_archive_recorder.audio.sound_server import native_rate
 from signal_archive_recorder.audio.timeline import StreamTimeline
 from signal_archive_recorder.clockmon.monitor import ClockMonitor, NtpProbe, ntplib_probe
@@ -93,6 +94,7 @@ class Recorder:
         self.clock_monitor: ClockMonitor | None = None
         self.disk_monitor: DiskMonitor | None = None
         self.upload_service: UploadService | None = None
+        self.live_level: LiveLevel | None = None
         self._uploader_factory = uploader_factory or self._default_uploader
         self._ntp_probe = ntp_probe
         self.recovered: list[Recovery] = []
@@ -198,11 +200,12 @@ class Recorder:
                 log.warning("%s", message)
                 bus.publish(CaptureWarning(source="wsjtx", code="wsjtx_port_busy", message=message))
 
+        self.live_level = LiveLevel(fmt)
         self.capture = holder["capture"] = Capture(
             fmt,
             bus=bus,
             clock=self.clock,
-            sinks=[self.manager],
+            sinks=[self.manager, self.live_level],
             buffer_seconds=cfg.audio.buffer_seconds,
             timeline=timeline,
         )
