@@ -34,6 +34,9 @@ bind = "127.0.0.1"
 enabled = true               # NTP check at start and every interval_s
 interval_s = 600
 # servers = ["pool.ntp.org", "time.cloudflare.com", "time.google.com"]
+
+[upload]
+repo = "signal-archive-project/signal-archive-intake"
 """
 
 from __future__ import annotations
@@ -80,6 +83,11 @@ class ClockConfig:
 
 
 @dataclass(frozen=True)
+class UploadConfig:
+    repo: str = "signal-archive-project/signal-archive-intake"
+
+
+@dataclass(frozen=True)
 class RecorderConfig:
     storage_root: Path = field(default_factory=lambda: Path("~/SignalArchive").expanduser())
     audio: AudioConfig = field(default_factory=AudioConfig)
@@ -87,6 +95,7 @@ class RecorderConfig:
     station: StationSettings = field(default_factory=StationSettings)
     wsjtx: WsjtxConfig = field(default_factory=WsjtxConfig)
     clock: ClockConfig = field(default_factory=ClockConfig)
+    upload: UploadConfig = field(default_factory=UploadConfig)
 
 
 _SECTIONS = {
@@ -98,6 +107,7 @@ _SECTIONS = {
                 "station_profile_id"},
     "wsjtx": {"enabled", "port", "bind", "group"},
     "clock": {"enabled", "interval_s", "servers"},
+    "upload": {"repo"},
 }  # fmt: skip
 
 
@@ -151,6 +161,7 @@ def parse_config(data: dict[str, Any], base: Path = Path()) -> RecorderConfig:
                 bind=wsjtx.get("bind", "127.0.0.1"),
                 group=wsjtx.get("group") or None,
             ),
+            upload=UploadConfig(repo=data.get("upload", {}).get("repo", UploadConfig.repo)),
             clock=ClockConfig(
                 enabled=bool(clock.get("enabled", True)),
                 interval_s=float(clock.get("interval_s", 600)),

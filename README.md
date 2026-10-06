@@ -13,16 +13,27 @@ Station-side recorder for the **Signal Archive Project**. It captures bit-exact 
 
 FT8 comes first. Other digital modes (FT4, WSPR, JS8, Q65, PSK31, RTTY and more) are planned soon after.
 
-## Running it (v0.1, headless)
+## Running it
 
 ```bash
 pip install -e .
-signal-archive-recorder --list-devices            # find your rig's sound card
-cp examples/recorder.toml recorder.toml           # set [audio] device, [station], [wsjtx]
-signal-archive-recorder --headless --config recorder.toml
+signal-archive-recorder devices                        # find your rig's sound card
+cp examples/recorder.toml recorder.toml                # set [audio] device, [station], [wsjtx]
+signal-archive-recorder record --config recorder.toml  # Ctrl-C to stop
 ```
 
-It records until Ctrl-C, then finishes the current chunk. Each session is saved to `~/SignalArchive/sessions/<UTC start>/`:
+To contribute recordings to the Signal Archive Project:
+
+```bash
+signal-archive-recorder consent                     # read and accept the terms (CC BY 4.0)
+signal-archive-recorder login                       # paste a Hugging Face write token; kept in your OS keyring
+signal-archive-recorder review --config recorder.toml        # see exactly what would be shared
+signal-archive-recorder remove-chunk SESSION CHUNK --config recorder.toml   # optional
+signal-archive-recorder upload --config recorder.toml        # one pull request per session
+signal-archive-recorder status --config recorder.toml        # follow up the pull requests
+```
+
+`record` runs until Ctrl-C, then finishes the current chunk. Each session is saved to `~/SignalArchive/sessions/<UTC start>/`:
 
 - `recordings/`: verified FLAC chunks and their metadata
 - `labels/wsjtx/`: what WSJT-X decoded, kept separate from the recordings

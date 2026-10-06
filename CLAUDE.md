@@ -104,7 +104,7 @@ pytest -m "not hardware"            # full offline suite
 pytest tests/contract               # every registered mode
 pytest --hardware tests/hardware    # with a real rig/sound card attached
 python tools/fake_wsjtx_emitter.py --mode FT8 --port 2237
-signal-archive-recorder --headless --config dev.toml
+signal-archive-recorder record --config dev.toml
 ```
 
 ---
@@ -268,7 +268,7 @@ Build:
 - `recorder.py` `Recorder`. Start order: recover, open the device (so a missing device fails before any session exists), open the session, start the listener, start the capture writer, then start the stream. Stop runs in reverse, with sources stopped before the session closes.
 - `session/recovery.py`: `.flac.partial` files under `sessions/*/recordings/` are recovered with metadata built from the audio alone (`recovered`/`crashed`, timeline unknown), and the crashed session's `session.json` is updated. Unrecoverable files move to `local/`.
 - `audio/file_backend.py` `FileBackend`: plays a 16- or 24-bit WAV as if it were a sound card, in real time or faster, through `[audio] file = …`.
-- `cli.py`: `signal-archive-recorder --headless --config FILE`, `--list-devices` and `--version`. SIGINT, SIGTERM and SIGBREAK (Windows Ctrl-Break) stop cleanly. Exit codes: 0 for a clean stop, 2 for a config error, 3 for an audio device problem.
+- `cli.py`: `signal-archive-recorder record --config FILE` (originally `--headless`; subcommands since Stage 8), `devices` and `--version`. SIGINT, SIGTERM and SIGBREAK (Windows Ctrl-Break) stop cleanly. Exit codes: 0 for a clean stop, 2 for a config error, 3 for an audio device problem.
 
 Exit tests:
 - `test_e2e_ft8_session` (`tests/integration`): the real `Recorder` with a fake sound card on a fake clock and real UDP WSJT-X datagrams, running 12 minutes of FT8 with one band change and two TX periods. It checks:
@@ -310,21 +310,34 @@ Exit tests:
 Target: the Hugging Face **dataset** repo `signal-archive-project/signal-archive-intake`, licensed CC-BY-4.0 and **ungated**, so volunteers can open PRs without requesting access. Each session is one PR, validated before it's merged. A curated, gated public dataset (with a Zenodo concept DOI and versioned releases) is built from the reviewed intake later, and a Hugging Face collection groups the project's repos. Consent and license text are versioned (`license_id`, `consent_version`), so the wording can change without a code change.
 
 Build:
-- `consent.py`: license text, acceptance stored with timestamp and license ID
-- Token storage through `keyring` and a setup check that the token can open PRs on the intake repo
-- `queue.py` (states: queued → uploading → pr_opened → validated or failed)
-- `hf.py` (`upload_folder(..., create_pr=True)`, one PR per session)
-- Status polling of PR comments
-- Review step: list chunks and fields, delete a chunk
+- `upload/consent.py`: plain-language terms (`CONSENT_TEXT`, `CONSENT_VERSION`) and `ConsentStore` (`<config dir>/consent.json`, with the time, license and version). Changing the text or license version requires agreeing again. The current consent is recorded in each new session's `session.json`.
+- `upload/token.py`: `Token` (masked in repr/str, can't be pickled, `reveal()` only when calling Hugging Face), `TokenStore` (OS keyring only, through `keyring`), and `scrub_token` for error messages.
+- `upload/hub.py`: the `Hub` interface and `HfHub` (`huggingface_hub`).
+  - `check_token`: a read-only token, or a fine-grained token without write access, gets an error naming the needed permission.
+  - `open_pr`: `upload_folder(create_pr=True)` to `contributions/<hf user>/<session id>/`, sending only `session.json`, `recordings/*.flac|*.meta.json` and `labels/*`. `local/`, partial and invalid files never go.
+  - `find_open_pr` and `pr_status`.
+- `upload/review.py`:
+  - `review` and `format_review`: duration, bands, modes, chunks, and exactly what's shared about the operator.
+  - `remove_chunk`: moves the chunk, and the labels from its time window, to `local/removed/`, and updates `session.json`.
+  - `preflight`: re-verifies every FLAC (MD5 and SHA-256), re-validates every JSON file, checks the session is finished and consistent, and scans the upload for machine secrets (FLAC headers only).
+- `upload/queue.py` `Uploader`: per-session `local/upload.json`, with states `queued → uploading → pr_opened → validated | failed`, plus `blocked`.
+  - A failed attempt stays `queued` with a scrubbed `last_error`.
+  - An interrupted `uploading` is retried, and an existing open PR with the same title is adopted rather than duplicated.
+  - One PR per session.
+  - Local files are never deleted here.
+- `upload/validator.py`: reads the newest `signal-archive-validator` block in the PR comments (`docs/validator-comment.md`). Without one, a merged PR counts as validated and a closed one as failed.
+- CLI subcommands: `record`, `devices`, `consent`, `login`, `logout`, `review`, `remove-chunk`, `upload` and `status`. Tests swap in a fake hub, keyring and clock through `cli.make_hub`, `cli.make_token_store` and `cli.make_clock`.
 
-Exit tests (all against `fake_hf.py`):
-- `test_no_upload_without_consent`.
-- `test_token_never_on_disk`: after setup, scan the config dir, logs and session folders for the token, and confirm repr/str of the config objects masks it.
-- `test_token_permission_check`: a read-only token gets a clear error that names the permission needed.
-- `test_one_pr_per_session`.
-- `test_local_kept_until_pr_confirmed`: if the upload fails after the files are sent but before a PR exists, the files stay and the state is retryable.
-- `test_deleted_chunk_not_uploaded`.
-- `test_validator_status_polled`: a fake PR comment with a validator result moves the state to `validated` or `failed`.
+Exit tests (fake Hugging Face `tests/fakes/fake_hf.py`, which uses `huggingface_hub`'s own pattern filter; in-memory keyring):
+- `test_no_upload_without_consent`, `test_changed_terms_need_new_consent` and `test_consent_cli`.
+- `test_token_never_on_disk`: login, upload (including a failure whose message contains the token) and status through the CLI. The token appears in no output, log or file under the config dir or archive, and no repr.
+- `test_token_permission_check` (read-only and fine-grained without write are rejected, with the needed permission named), `test_login_rejects_read_only_token` and `test_token_masks_itself`.
+- `test_one_pr_per_session`: exactly the allowed files are sent.
+- `test_local_kept_until_pr_confirmed`, `test_crash_after_pr_created_is_not_duplicated` and `test_interrupted_upload_state_is_retried`.
+- `test_deleted_chunk_not_uploaded` (labels in the window go too, and removal is refused once a PR exists), `test_preflight_blocks_bad_sessions` and `test_unfinished_session_waits`.
+- `test_validator_status_polled` (the newest verdict wins) and `test_merged_or_closed_without_verdict`.
+- `test_review_shows_what_is_shared`.
+- Manual: `login` with a real token, then the first real `upload` to `signal-archive-project/signal-archive-intake`.
 
 ### Stage 9: Robustness (v0.3)
 

@@ -241,7 +241,7 @@ def test_sigterm_mid_chunk(tmp_path: Path) -> None:
             sys.executable,
             "-m",
             "signal_archive_recorder.cli",
-            "--headless",
+            "record",
             "--config",
             str(config),
         ],
