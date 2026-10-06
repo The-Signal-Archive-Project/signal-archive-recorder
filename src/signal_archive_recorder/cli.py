@@ -4,6 +4,8 @@
 # https://mozilla.org/MPL/2.0/.
 """Command line for Signal Archive Recorder.
 
+    signal-archive-recorder                                 first run: setup; then: record
+    signal-archive-recorder setup                           run first-run setup again
     signal-archive-recorder init                            create a starter configuration
     signal-archive-recorder record                          record until Ctrl-C
     signal-archive-recorder devices                         list audio inputs
@@ -35,8 +37,10 @@ from types import FrameType
 
 from signal_archive_recorder import __version__
 from signal_archive_recorder.audio.device import DeviceUnavailableError, SoundDeviceBackend
+from signal_archive_recorder.clockmon.monitor import ntplib_probe
 from signal_archive_recorder.config import ConfigError, RecorderConfig, load_config
 from signal_archive_recorder.core.clock import Clock, SystemClock
+from signal_archive_recorder.firstrun.wizard import SetupCancelled, TerminalPrompter, Wizard
 from signal_archive_recorder.metadata.builder import MetadataBuilder
 from signal_archive_recorder.modes import ModeRegistry
 from signal_archive_recorder.paths import config_dir, default_config_file, example_config
@@ -126,6 +130,64 @@ def cmd_record(args: argparse.Namespace) -> int:
     print(f"saved {len(summary.chunks)} chunks to {summary.session.path} "
           f"({summary.capture.lost_frames} frames lost)", flush=True)  # fmt: skip
     return 0
+
+
+def build_wizard() -> Wizard:
+    """The setup wizard with the real terminal, audio system, Hugging Face and clock."""
+    return Wizard(
+        prompt=TerminalPrompter(),
+        backend_factory=SoundDeviceBackend,
+        hub_factory=make_hub,
+        tokens=_tokens(),
+        consent=_consent(),
+        now_ns=_clock().now_ns,
+        ntp_probe=ntplib_probe,
+    )
+
+
+def _run_wizard(path: Path) -> int:
+    wizard = build_wizard()
+    try:
+        wizard.run(path)
+    except SetupCancelled as exc:
+        wizard.prompt.say(str(exc))
+        return EXIT_CONFIG
+    except (KeyboardInterrupt, EOFError):
+        wizard.prompt.say("\nSetup stopped; nothing was saved.")
+        return EXIT_CONFIG
+    return 0
+
+
+def cmd_start(args: argparse.Namespace) -> int:
+    """No command: set up on first run, otherwise record."""
+    path: Path = args.config or default_config_file()
+    if path.exists():
+        return cmd_record(args)
+    if not sys.stdin.isatty():
+        print(
+            f"No configuration yet ({path}). Run `signal-archive-recorder` in a terminal to "
+            "set up, or create one with `signal-archive-recorder init --device NAME`.",
+            file=sys.stderr,
+        )
+        return EXIT_CONFIG
+    result = _run_wizard(path)
+    if result != 0:
+        return result
+    answer = input("Start recording now? [Y/n]: ").strip().lower()
+    if answer in ("", "y", "yes"):
+        return cmd_record(args)
+    print("Start recording any time with: signal-archive-recorder")
+    return 0
+
+
+def cmd_setup(args: argparse.Namespace) -> int:
+    path: Path = args.config or default_config_file()
+    if path.exists():
+        answer = input(f"{path} exists. Replace it with new settings? [y/N]: ").strip().lower()
+        if answer not in ("y", "yes"):
+            print("Kept your existing settings.")
+            return 0
+    return _run_wizard(path)
 
 
 def cmd_init(args: argparse.Namespace) -> int:
@@ -295,14 +357,18 @@ def build_parser() -> argparse.ArgumentParser:
         description="Record raw receive audio for the Signal Archive Project.",
     )
     parser.add_argument("--version", action="version", version=__version__)
-    sub = parser.add_subparsers(dest="command", required=True, metavar="COMMAND")
+    parser.add_argument("--config", type=Path, help="TOML configuration file")
+    parser.add_argument("-v", "--verbose", action="store_true")
+    parser.set_defaults(func=cmd_start)
+    sub = parser.add_subparsers(dest="command", metavar="COMMAND")
 
     def add(name: str, func: object, help_text: str) -> argparse.ArgumentParser:
         p = sub.add_parser(name, parents=[common], help=help_text, description=help_text)
         p.set_defaults(func=func)
         return p
 
-    p = add("init", cmd_init, "create a starter configuration file")
+    add("setup", cmd_setup, "run first-run setup (again)")
+    p = add("init", cmd_init, "create a starter configuration file without questions")
     p.add_argument("--device", help="audio input name (default: ask)")
     p.add_argument("--force", action="store_true", help="replace an existing file")
     add("record", cmd_record, "record until Ctrl-C")
