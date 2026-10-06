@@ -55,9 +55,16 @@ from signal_archive_recorder.ui.review_window import ReviewWindow
 
 log = logging.getLogger(__name__)
 
-COLOURS = {"green": "#2e9d4a", "yellow": "#d9a400", "red": "#c8322b", "grey": "#8a8f98"}
+COLOURS = {
+    "green": "#2e9d4a",
+    "yellow": "#d9a400",
+    "red": "#c8322b",
+    "grey": "#8a8f98",
+    "blue": "#2f6fd6",
+}
 LEVEL_COLOURS = {"ok": "green", "warn": "yellow", "bad": "red", "off": "grey"}
 TRAY_TEXT = {
+    "blue": "Ready: recording starts when WSJT-X runs",
     "green": "Recording; all good",
     "yellow": "Recording; something needs a look",
     "red": "Not recording",
@@ -226,10 +233,12 @@ class StatusWindow(QWidget):
         try:
             if self.controller.paused:
                 self.controller.resume()
-                self.message.setText("Recording again (a new session).")
+                self.message.setText("Resumed: recording while WSJT-X runs (a new session).")
             else:
                 self.controller.pause()
-                self.message.setText("Paused: the session was saved.")
+                self.message.setText(
+                    "Paused: the session was saved, and nothing is recorded until you resume."
+                )
         except Exception as exc:
             self.message.setText(f"Couldn't do that: {exc}")
         self.refresh()

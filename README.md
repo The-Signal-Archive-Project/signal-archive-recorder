@@ -48,7 +48,7 @@ The first time, this runs **setup**:
 5. a check for WSJT-X
 6. a clock check
 
-After that, the same command just records, until Ctrl-C. Run `signal-archive-recorder setup` to change your answers later, or `signal-archive-recorder init --device NAME` to write a config without questions (for scripts).
+After that, the same command runs the recorder until Ctrl-C. It **only records while WSJT-X is running**: until then it waits, ready, with the sound card closed. When WSJT-X starts, a session begins, and when WSJT-X closes (or goes quiet for 30 seconds), the session is saved and the recorder waits again. Set `[recording] start = "always"` to record from start to stop instead. Run `signal-archive-recorder setup` to change your answers later, or `signal-archive-recorder init --device NAME` to write a config without questions (for scripts).
 
 Setup writes the config to your user settings folder:
 - Linux: `~/.config/signal-archive-recorder/recorder.toml`
@@ -92,9 +92,9 @@ pipx install --force "signal-archive-recorder[gui] @ git+https://github.com/The-
 signal-archive-recorder tray      # or: signal-archive-recorder-gui
 ```
 
-The first time, a setup window walks through the same steps as the terminal setup (terms, Hugging Face login, audio input with a level test, station, WSJT-X and clock checks). After that it records just like `record`, with a small window and a tray icon whose colour says how things are going: **green** recording and all good, **yellow** recording but something needs a look (no WSJT-X, clipping, clock off, uploads stuck), **red** not recording, **grey** paused. The window shows a checklist and an audio level meter, and lets you:
+The first time, a setup window walks through the same steps as the terminal setup (terms, Hugging Face login, audio input with a level test, station, WSJT-X and clock checks). After that it records just like `record`, with a small window and a tray icon whose colour says how things are going: **blue** ready, waiting for WSJT-X, **green** recording and all good, **yellow** recording but something needs a look (no WSJT-X, clipping, clock off, uploads stuck), **red** not recording, **grey** paused. The window shows a checklist and an audio level meter, and lets you:
 - **Mark this:** add a note ("strong QRM", "rare DX") at this moment of the recording; it's saved with the chunk.
-- **Pause / Resume:** pausing ends the session cleanly; resuming starts a new one.
+- **Pause / Resume:** pausing ends the session cleanly and stops recording even while WSJT-X runs; resuming records again (a new session).
 - **Review & upload:** see exactly what each session would share and which chunks would be kept back, then upload.
 - **Start when I log in**, and open the recordings folder or the settings file.
 - **Save diagnostics:** a zip to attach to a bug report. It holds no audio or token, and your computer name, user name, callsign and grid are redacted (also `signal-archive-recorder diagnostics`).
@@ -103,7 +103,7 @@ Closing the window keeps recording in the tray; **Quit** in the tray menu stops 
 
 ### No radio?
 
-Set `[audio] file = "something.wav"` to play a 16- or 24-bit WAV as if it were a sound card. With a clone of this repository, `python tools/fake_wsjtx_emitter.py` stands in for WSJT-X.
+Set `[audio] file = "something.wav"` to play a 16- or 24-bit WAV as if it were a sound card (with `[recording] start = "always"`, or a WSJT-X stand-in so it knows when to record). With a clone of this repository, `python tools/fake_wsjtx_emitter.py` stands in for WSJT-X.
 
 ## Development
 

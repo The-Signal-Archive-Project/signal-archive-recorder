@@ -16,6 +16,10 @@ buffer_seconds = 10
 # file = "reference.wav"     # play a 16/24-bit WAV instead of a device (no radio needed)
 # file_speed = 1.0
 
+[recording]
+start = "with_decoder"       # record only while WSJT-X is running (otherwise wait, ready);
+                             # "always" records from start to stop (e.g. with [audio] file)
+
 [chunking]
 target_seconds = 300
 

@@ -56,9 +56,10 @@ from signal_archive_recorder.firstrun.wizard import SetupCancelled, TerminalProm
 from signal_archive_recorder.metadata.builder import MetadataBuilder
 from signal_archive_recorder.modes import ModeRegistry
 from signal_archive_recorder.paths import config_dir, default_config_file, example_config, log_dir
-from signal_archive_recorder.recorder import Recorder
+from signal_archive_recorder.recorder import RunSummary
 from signal_archive_recorder.session.cleanup import cleanup
-from signal_archive_recorder.session.storage import SessionStorage
+from signal_archive_recorder.session.storage import SessionDir, SessionStorage
+from signal_archive_recorder.station import Station
 from signal_archive_recorder.upload.consent import CONSENT_TEXT, ConsentStore, NoConsentError
 from signal_archive_recorder.upload.hub import DEFAULT_REPO, HfHub, Hub, HubError, check_token
 from signal_archive_recorder.upload.queue import (
@@ -182,18 +183,34 @@ def cmd_record(args: argparse.Namespace) -> int:
     for name in ("SIGINT", "SIGTERM", "SIGBREAK"):  # SIGBREAK: Ctrl-Break on Windows
         if hasattr(signal, name):
             signal.signal(getattr(signal, name), handler)
-    recorder = Recorder(config)
+
+    def on_session(started: SessionDir | None, ended: RunSummary | None) -> None:
+        if started is not None:
+            print(f"recording to {started.path} (Ctrl-C to stop)", flush=True)
+        if ended is not None:
+            print(
+                f"saved {len(ended.chunks)} chunks to {ended.session.path} "
+                f"({ended.capture.lost_frames} frames lost)",
+                flush=True,
+            )
+
+    station = Station(config, on_session=on_session)
     try:
-        session = recorder.start()
+        station.start()
     except DeviceUnavailableError as exc:
         print(f"audio device: {exc}", file=sys.stderr)
         return EXIT_DEVICE
-    print(f"recording to {session.path} (Ctrl-C to stop)", flush=True)
+    if station.last_error:
+        print(station.last_error, file=sys.stderr, flush=True)
+    if not station.always:
+        print(
+            "Ready: recording starts when WSJT-X is running, and stops when it closes "
+            "(Ctrl-C to quit).",
+            flush=True,
+        )
     while not stop.wait(0.5):
         pass
-    summary = recorder.stop(reason="signal")
-    print(f"saved {len(summary.chunks)} chunks to {summary.session.path} "
-          f"({summary.capture.lost_frames} frames lost)", flush=True)  # fmt: skip
+    station.stop(reason="signal")
     return 0
 
 

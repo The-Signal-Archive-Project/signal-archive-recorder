@@ -424,6 +424,8 @@ Split into three PRs: **9a**, recording robustness (done below); **9b**, resumab
 
 Before adding modes, FT8 through WSJT-X has to work on many stations: different OSes, sound interfaces (rig USB codecs, SignaLink, Digirig…), WSJT-X/JTDX versions, and GridTracker or JTAlert alongside. This pulls most of Stage 12 forward. Decisions (2026-10-06): Windows builds are **unsigned** for the beta (SmartScreen's "Run anyway"; apply to SignPath Foundation for v1.0); beta testers upload to the **production** intake (screening plus PR review protect it); Windows is tested **in CI only** until testers report; **macOS later**.
 
+**Record only while WSJT-X runs (owner's decision, 2026-10-06):** `[recording] start = "with_decoder"` (the default) stands by with the sound card closed and records while a decoder is up; `"always"` records from start to stop (WAV playback, future decoder-less modes). "Up" means its heartbeat/status is arriving; a Monitor-off WSJT-X still counts (screening keeps such chunks back). `station.py` `Station` holds the long-lived bus, WSJT-X listener and upload service, and runs one `Recorder` per session on its own thread. `WsjtxListener.announce()` replays the current state (SourceUp, frequency, mode, TX) into each new session. Sessions end with `decoder_closed` on Close or the 30 s heartbeat timeout. A failed session start (no sound card) is retried every 30 s and shown in the tray. Tests: `tests/unit/test_station.py`.
+
 **H1: the desktop app (done)**
 - `signal-archive-recorder tray` and `signal-archive-recorder-gui` (a `gui-scripts` entry point: no console window on Windows) run `ui/app.py` `main()`:
   - one instance per user and settings folder (`SingleInstance`, a `QLocalServer`); a second start shows the running one's window

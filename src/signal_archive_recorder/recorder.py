@@ -8,6 +8,11 @@ Start: recover crashed chunks, open the session, start sources, start the captur
 writer, then open the device. Stop runs the other way: stop the device, drain the
 audio, stop the sources (so their logs are complete), then close the session,
 which finalises the last chunk and writes session.json.
+
+A Recorder is one session. On its own (the e2e tests) it owns its event bus, WSJT-X
+listener and upload service. Run by a `Station`, it borrows the station's
+long-lived bus and listener, which outlive sessions so that the station can wait
+for WSJT-X between them.
 """
 
 from __future__ import annotations
@@ -63,6 +68,23 @@ def select_device(backend: AudioBackend, wanted: str) -> DeviceInfo:
     return (exact or matches)[0]
 
 
+def default_uploader(cfg: RecorderConfig, clock: Clock) -> Uploader:
+    return Uploader(
+        SessionStorage(cfg.storage_root),
+        HfHub(),
+        TokenStore(),
+        ConsentStore(config_dir() / "consent.json"),
+        clock,
+        repo_id=cfg.upload.repo,
+        require_decoder=cfg.upload.require_decoder,
+        max_bytes_per_s=cfg.upload.max_bytes_per_s,
+    )
+
+
+def needs_upload_service(cfg: RecorderConfig) -> bool:
+    return cfg.upload.schedule != "manual" or bool(cfg.max_gb or cfg.delete_after_days)
+
+
 @dataclass
 class RunSummary:
     session: SessionDir
@@ -81,8 +103,16 @@ class Recorder:
         registry: ModeRegistry | None = None,
         ntp_probe: NtpProbe = ntplib_probe,
         uploader_factory: Callable[[], Uploader] | None = None,
+        bus: EventBus | None = None,
+        listener: WsjtxListener | None = None,
+        manage_uploads: bool = True,
     ) -> None:
+        """`bus` and `listener` given: borrowed (a Station's); they're not started,
+        stopped or closed here. `manage_uploads=False`: the owner runs uploads."""
         self.config = config
+        self._shared_bus = bus
+        self._shared_listener = listener
+        self._manage_uploads = manage_uploads
         self.clock = clock or SystemClock()
         self.registry = registry or ModeRegistry.load_default()
         self._backend = backend
@@ -108,17 +138,7 @@ class Recorder:
         return SoundDeviceBackend()
 
     def _default_uploader(self) -> Uploader:
-        cfg = self.config
-        return Uploader(
-            SessionStorage(cfg.storage_root),
-            HfHub(),
-            TokenStore(),
-            ConsentStore(config_dir() / "consent.json"),
-            self.clock,
-            repo_id=cfg.upload.repo,
-            require_decoder=cfg.upload.require_decoder,
-            max_bytes_per_s=cfg.upload.max_bytes_per_s,
-        )
+        return default_uploader(self.config, self.clock)
 
     def _native_rate(self, device: DeviceInfo) -> int:
         """The device's true rate (asking the sound server on Linux)."""
@@ -136,7 +156,7 @@ class Recorder:
         for r in self.recovered:
             log.warning("recovery: %s: %s", r.partial.name, r.reason)
 
-        self.bus = bus = EventBus(self.clock)
+        self.bus = bus = self._shared_bus or EventBus(self.clock)
         # Open the device before creating the session, so a missing device fails early
         # and leaves no empty session behind. The stream isn't started until the end.
         holder: dict[str, Capture] = {}
@@ -179,7 +199,11 @@ class Recorder:
             )
             self.clock_monitor.start()
 
-        if cfg.wsjtx.enabled:
+        if self._shared_listener is not None:
+            self.listener = self._shared_listener
+            self.listener.attach(session.decode_log("wsjtx"))
+            self.listener.announce()  # what WSJT-X reported before this session began
+        elif cfg.wsjtx.enabled and self._shared_bus is None:  # a Station brings its own
             self.listener = WsjtxListener(
                 bus,
                 self.registry,
@@ -209,7 +233,7 @@ class Recorder:
             buffer_seconds=cfg.audio.buffer_seconds,
             timeline=timeline,
         )
-        if cfg.upload.schedule != "manual" or cfg.max_gb or cfg.delete_after_days:
+        if self._manage_uploads and needs_upload_service(cfg):
             self.upload_service = UploadService(
                 self._uploader_factory(),
                 bus,
@@ -236,7 +260,10 @@ class Recorder:
             self.stream.stop()
             self.stream.close()
         stats = self.capture.stop(timeout=30)
-        if self.listener is not None:
+        if self.listener is not None and self.listener is self._shared_listener:
+            self.bus.wait_idle()
+            self.listener.attach(None)  # this session's decode log is complete
+        elif self.listener is not None:
             self.listener.stop()
         if self.clock_monitor is not None:
             self.clock_monitor.stop()
@@ -244,7 +271,8 @@ class Recorder:
             self.disk_monitor.stop()
         self.bus.wait_idle()
         chunks = self.manager.close(end_reason=reason)
-        self.bus.close()
+        if self._shared_bus is None:
+            self.bus.close()
         log.info(
             "stopped (%s): %d chunks, %d frames, %d lost",
             reason,

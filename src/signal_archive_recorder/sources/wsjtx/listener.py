@@ -67,6 +67,8 @@ class _ClientState:
     mode_id: str | None = None
     transmitting: bool = False
     version: str | None = None
+    last_freq: Any = None  # the last FreqChanged/ModeChanged published, for announce()
+    last_mode: Any = None
 
 
 SocketFactory = Callable[[], socket.socket]
@@ -119,6 +121,31 @@ class WsjtxListener:
             self._thread.join(timeout)
         if self._sock:
             self._sock.close()
+
+    def attach(self, decode_log: Path | None) -> None:
+        """Where decodes are logged from now on (a Station switches it per session)."""
+        with self._lock:
+            self._decode_log = decode_log
+
+    def announce(self) -> None:
+        """Publish the current state of every connected client again: SourceUp, then
+        frequency, mode and TX. A session that starts while WSJT-X is already running
+        learns what it would otherwise only hear about at the next change."""
+        with self._lock:
+            for client_id, state in self._clients.items():
+                if not state.up:
+                    continue
+                detail = f"{client_id} {state.version}" if state.version else client_id
+                self._publish(SourceUp, client_id, detail=detail)
+                for event in (state.last_freq, state.last_mode):
+                    if event is not None:
+                        self._bus.publish(event)
+                if state.transmitting:
+                    self._publish(TxStarted, client_id, extra_raw={"announced": True})
+
+    def up_clients(self) -> list[str]:
+        with self._lock:
+            return [client_id for client_id, state in self._clients.items() if state.up]
 
     @property
     def address(self) -> tuple[str, int]:
@@ -221,12 +248,12 @@ class WsjtxListener:
         state = self._client(s.client_id)
         if s.dial_hz != state.dial_hz:
             state.dial_hz = s.dial_hz
-            self._publish(FreqChanged, s.client_id, dial_hz=s.dial_hz)
+            state.last_freq = self._publish(FreqChanged, s.client_id, dial_hz=s.dial_hz)
         if (s.mode, s.tr_period_s) != (state.mode, state.tr_period_s):
             state.mode, state.tr_period_s = s.mode, s.tr_period_s
             res = self._registry.resolve(self.source, s.mode or "")
             state.mode_id = res.mode.id
-            self._publish(
+            state.last_mode = self._publish(
                 ModeChanged,
                 s.client_id,
                 mode_id=res.mode.id,
@@ -293,9 +320,11 @@ class WsjtxListener:
 
     def _publish(
         self, kind: Any, client_id: str, *, extra_raw: dict[str, Any] | None = None, **fields: Any
-    ) -> None:
+    ) -> Any:
         raw = {"client_id": client_id, **(extra_raw or {})}
-        self._bus.publish(kind(source=self.source, raw=raw, **fields))
+        event = kind(source=self.source, raw=raw, **fields)
+        self._bus.publish(event)
+        return event
 
     def _log_decode(self, t_ns: int, event: Decode) -> None:
         if self._decode_log is None:

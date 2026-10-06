@@ -2,11 +2,12 @@
 # This Source Code Form is subject to the terms of the Mozilla Public License, v. 2.0.
 # If a copy of the MPL was not distributed with this file, You can obtain one at
 # https://mozilla.org/MPL/2.0/.
-"""Runs the recorder for the window and tray, and reports its health. No Qt here.
+"""Runs the station for the window and tray, and reports its health. No Qt here.
 
-Pause ends the current session cleanly (its last chunk is finished and the audio
-device released) and resume starts a new one, so every session is one unbroken
-recording.
+The station stands by until WSJT-X runs, and records while it does. Pause ends the
+current session cleanly (its last chunk is finished and the audio device released)
+and keeps the station from recording until resumed, so every session is one
+unbroken recording.
 """
 
 from __future__ import annotations
@@ -32,6 +33,7 @@ from signal_archive_recorder.core.events import (
 from signal_archive_recorder.modes.registry import ModeRegistry
 from signal_archive_recorder.recorder import Recorder
 from signal_archive_recorder.session.storage import SessionStorage
+from signal_archive_recorder.station import Station
 from signal_archive_recorder.ui.health import DiskState, HealthInputs, WsjtxState
 from signal_archive_recorder.upload.queue import UploadRecord, describe_result
 from signal_archive_recorder.upload.review import ReviewError, format_review, review
@@ -39,64 +41,60 @@ from signal_archive_recorder.upload.screening import format_screens, screen_sess
 
 log = logging.getLogger(__name__)
 
-RecorderFactory = Callable[[RecorderConfig], Recorder]
+StationFactory = Callable[[RecorderConfig], Station]
 
 
 class RecorderController:
-    def __init__(self, config: RecorderConfig, factory: RecorderFactory = Recorder) -> None:
+    def __init__(self, config: RecorderConfig, factory: StationFactory = Station) -> None:
         self.config = config
         self._factory = factory
-        self.recorder: Recorder | None = None
+        self.station: Station | None = None
         self.paused = False
         self.notes: list[str] = []
         self._lock = threading.Lock()
         self._health = HealthInputs(wsjtx="never" if config.wsjtx.enabled else "disabled")
 
+    @property
+    def recorder(self) -> Recorder | None:
+        """The current session's recorder (None while standing by or paused)."""
+        return self.station.recorder if self.station else None
+
     # -- control ------------------------------------------------------------------
 
     def start(self) -> None:
         with self._lock:
-            if self.recorder is not None:
+            if self.station is not None:
                 return
-            recorder = self._factory(self.config)
-            session = recorder.start()
-            assert recorder.bus is not None
-            recorder.bus.subscribe(self._on_event)
-            self.recorder, self.paused = recorder, False
             wsjtx: WsjtxState = "never" if self.config.wsjtx.enabled else "disabled"
-            self._health = replace(
-                self._health,
-                recording=True,
-                paused=False,
-                session=session.session_id,
-                wsjtx=wsjtx,
-                disk="ok",
-            )
+            self._health = replace(self._health, paused=False, wsjtx=wsjtx, disk="ok")
+            station = self._factory(self.config)
+            station.start(subscribers=[self._on_event])
+            self.station, self.paused = station, False
 
     def stop(self, reason: str = "stopped") -> None:
         with self._lock:
-            recorder, self.recorder = self.recorder, None
-            self._health.recording = False
-        if recorder is not None:
-            recorder.stop(reason=reason)
+            station, self.station = self.station, None
+        if station is not None:
+            station.stop(reason=reason)
 
     def pause(self) -> None:
-        self.stop(reason="paused")
+        """Stop recording (saving the session), even while WSJT-X runs."""
         self.paused = True
-        self._health.paused = True
+        if self.station is not None:
+            self.station.pause()
 
     def resume(self) -> None:
         self.paused = False
-        self._health.paused = False
-        self.start()
+        if self.station is not None:
+            self.station.resume()
 
     def mark(self, text: str) -> bool:
         """Add an operator note at this moment of the recording."""
         text = text.strip()
-        recorder = self.recorder
-        if not text or recorder is None or recorder.bus is None:
+        station = self.station
+        if not text or station is None or station.recorder is None or station.bus is None:
             return False
-        recorder.bus.publish(Note(source="operator", text=text[:200]))
+        station.bus.publish(Note(source="operator", text=text[:200]))
         self.notes.append(text)
         return True
 
@@ -120,10 +118,17 @@ class RecorderController:
                 disk: dict[str, DiskState] = {"disk_low": "low", "disk_critical": "critical"}
                 h.disk = disk.get(e.code, "ok")
             elif e.code == "wsjtx_port_busy":
-                h.wsjtx = "down"
+                h.wsjtx = "busy"
 
     def snapshot(self) -> HealthInputs:
         h = replace(self._health)
+        station = self.station
+        state = station.state if station else "stopped"
+        h.recording = state == "recording"
+        h.standby = state == "standby"
+        h.paused = state == "paused" or (self.paused and state != "recording")
+        h.session = station.session.session_id if station and station.session else None
+        h.problem = station.last_error if station else None
         recorder = self.recorder
         if recorder is not None:
             level = recorder.live_level.latest() if recorder.live_level else None

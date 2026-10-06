@@ -15,7 +15,7 @@ from signal_archive_recorder.audio.format import AudioFormat
 from signal_archive_recorder.audio.levels import LiveLevel
 from signal_archive_recorder.core.clock import FakeClock
 from signal_archive_recorder.core.events import Note, SourceUp
-from signal_archive_recorder.recorder import Recorder
+from signal_archive_recorder.station import Station
 from signal_archive_recorder.ui.controller import RecorderController
 from signal_archive_recorder.ui.health import HealthInputs, checklist, tray_state
 from tests.fakes.fake_audio import FakeBackend, noise, sine
@@ -95,13 +95,17 @@ def test_mark_note_event(tmp_path: Path) -> None:
 def controller(tmp_path: Path) -> tuple[RecorderController, FakeClock]:
     clock = FakeClock(utc_ns("12:03:07"))
 
-    def factory(config: Any) -> Recorder:
+    def factory(config: Any) -> Station:
         backend = FakeBackend(
             [DEVICE], noise(FMT, 5), on_block=lambda n: clock.advance(n * S // 8000)
         )
-        return Recorder(config, backend=backend, clock=clock, ntp_probe=fake_ntp)
+        return Station(
+            config, clock=clock, ntp_probe=fake_ntp, recorder_kwargs={"backend": backend}
+        )
 
-    return RecorderController(make_config(tmp_path, buffer_seconds=60), factory), clock
+    # "always": these tests are about pause, resume and marks (standby: test_station.py)
+    config = replace(make_config(tmp_path, buffer_seconds=60), start="always")
+    return RecorderController(config, factory), clock
 
 
 def test_pause_saves_the_session_and_resume_starts_a_new_one(tmp_path: Path) -> None:

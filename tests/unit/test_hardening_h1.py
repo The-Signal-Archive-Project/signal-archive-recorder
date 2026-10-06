@@ -416,7 +416,7 @@ def test_desktop_app_saves_the_session_on_sigterm(tmp_path: Path) -> None:
     config.write_text(
         f"[storage]\nroot = {json.dumps(str(root))}\n"
         f'[audio]\nfile = {json.dumps(str(wav))}\nsample_format = "int16"\n'
-        "[wsjtx]\nport = 0\n[clock]\nenabled = false\n"
+        '[wsjtx]\nport = 0\n[clock]\nenabled = false\n[recording]\nstart = "always"\n'
     )
     env_vars = {
         **os.environ,
