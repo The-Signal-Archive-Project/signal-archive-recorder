@@ -8,6 +8,7 @@ the value is `reveal()`, used only when calling Hugging Face.
 from __future__ import annotations
 
 import contextlib
+import platform
 from typing import Any, Protocol
 
 SERVICE = "signal-archive-recorder"
@@ -49,21 +50,48 @@ class KeyringBackend(Protocol):
     def delete_password(self, service: str, username: str) -> None: ...
 
 
+class KeyringUnavailableError(RuntimeError):
+    """No OS keyring to keep the token in. We never fall back to a file."""
+
+
+def _keyring_help() -> str:
+    system = platform.system()
+    if system == "Linux":
+        return (
+            "No keyring service is running. Install and start one that provides the Secret "
+            "Service, e.g. GNOME Keyring (Debian/Ubuntu: sudo apt install gnome-keyring; Arch: "
+            "sudo pacman -S gnome-keyring) or KWallet, then log in to your desktop again. On a "
+            "desktop without one (e.g. Hyprland or Sway), start it from your session: "
+            "gnome-keyring-daemon --start --components=secrets"
+        )
+    return "The system keychain isn't available. Unlock it, or check the OS keychain settings."
+
+
 class _SystemKeyring:
     def __init__(self) -> None:
         import keyring
+        import keyring.errors
 
         self._keyring: Any = keyring
+        self._errors: Any = keyring.errors.KeyringError
+
+    def _call(self, name: str, *args: str) -> Any:
+        try:
+            return getattr(self._keyring, name)(*args)
+        except self._errors as exc:
+            if name == "delete_password":
+                raise
+            raise KeyringUnavailableError(f"{_keyring_help()} ({type(exc).__name__})") from None
 
     def get_password(self, service: str, username: str) -> str | None:
-        value: str | None = self._keyring.get_password(service, username)
+        value: str | None = self._call("get_password", service, username)
         return value
 
     def set_password(self, service: str, username: str, password: str) -> None:
-        self._keyring.set_password(service, username, password)
+        self._call("set_password", service, username, password)
 
     def delete_password(self, service: str, username: str) -> None:
-        self._keyring.delete_password(service, username)
+        self._call("delete_password", service, username)
 
 
 class TokenStore:

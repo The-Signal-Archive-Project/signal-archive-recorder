@@ -69,9 +69,8 @@ class SessionDir:
         return self.path / "local"
 
     def label_dir(self, source: str) -> Path:
-        path = self.labels / source
-        path.mkdir(parents=True, exist_ok=True)
-        return path
+        """Not created here: a label folder exists only once there's a label to write."""
+        return self.labels / source
 
     def chunk_id(self, index: int, first_sample_ns: int) -> str:
         return f"{index:04d}_{utc_compact(first_sample_ns)}"

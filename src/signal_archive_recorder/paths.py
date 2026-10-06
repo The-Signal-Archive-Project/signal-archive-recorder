@@ -26,3 +26,12 @@ def config_dir() -> Path:
 
 def default_config_file() -> Path:
     return config_dir() / "recorder.toml"
+
+
+def example_config() -> str:
+    """The starter configuration shipped with the package."""
+    from importlib.resources import files
+
+    return (
+        files("signal_archive_recorder.data").joinpath("recorder.example.toml").read_text("utf-8")
+    )

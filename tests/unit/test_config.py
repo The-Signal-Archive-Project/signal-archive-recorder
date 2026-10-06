@@ -5,7 +5,13 @@ import pytest
 
 from signal_archive_recorder.config import ConfigError, load_config, parse_config
 
-EXAMPLE = Path(__file__).resolve().parents[2] / "examples" / "recorder.toml"
+EXAMPLE = (
+    Path(__file__).resolve().parents[2]
+    / "src"
+    / "signal_archive_recorder"
+    / "data"
+    / "recorder.example.toml"
+)
 
 
 def test_example_config_parses() -> None:

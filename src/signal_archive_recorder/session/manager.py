@@ -505,7 +505,9 @@ class SessionManager:
             return record
         write_json_atomic(session.meta(chunk.chunk_id), meta)
         for stats in self.builder.label_stats(record):
-            with session.label_stats(stats["source"]).open("a", encoding="utf-8") as f:
+            path = session.label_stats(stats["source"])
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with path.open("a", encoding="utf-8") as f:
                 f.write(json.dumps(stats) + "\n")
         with self._lock:
             self.chunks.append(meta)
@@ -560,11 +562,8 @@ class SessionManager:
             chunk_ids = sorted(c["chunk_id"] for c in self.chunks)
             software = dict(self.software)
             clock_checks = list(self.clock_checks)
-        labels = (
-            sorted(p.name for p in self.session.labels.iterdir() if p.is_dir())
-            if (self.session.labels.is_dir())
-            else []
-        )
+        found = self.session.labels.iterdir() if self.session.labels.is_dir() else iter(())
+        labels = sorted(p.name for p in found if p.is_dir() and any(p.iterdir()))
         meta = self.builder.session(
             {
                 "session_id": self.session.session_id,
