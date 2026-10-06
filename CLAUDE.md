@@ -420,6 +420,32 @@ Split into three PRs: **9a**, recording robustness (done below); **9b**, resumab
 
 **Moved later:** an optional GPS/GPSDO time source (alongside the NTP monitor of Stage 7b).
 
+### Hardening for field testing (before Stage 10)
+
+Before adding modes, FT8 through WSJT-X has to work on many stations: different OSes, sound interfaces (rig USB codecs, SignaLink, Digirig…), WSJT-X/JTDX versions, and GridTracker or JTAlert alongside. This pulls most of Stage 12 forward. Decisions (2026-10-06): Windows builds are **unsigned** for the beta (SmartScreen's "Run anyway"; apply to SignPath Foundation for v1.0); beta testers upload to the **production** intake (screening plus PR review protect it); Windows is tested **in CI only** until testers report; **macOS later**.
+
+**H1: the desktop app (done)**
+- `signal-archive-recorder tray` and `signal-archive-recorder-gui` (a `gui-scripts` entry point: no console window on Windows) run `ui/app.py` `main()`:
+  - one instance per user and settings folder (`SingleInstance`, a `QLocalServer`); a second start shows the running one's window
+  - the **setup window** on first start (`ui/setup_wizard.py`): the terminal wizard's steps and services (`firstrun.wizard.Wizard` is the environment), and nothing is saved (consent, token, config, autostart) until Finish
+  - then recording, with the status window and tray icon
+- **Review & upload** window (`ui/review_window.py`), backed by `RecorderController.finished_sessions/describe/upload`. The text is shared with the CLI (`format_screens`, `describe_result`).
+- **Start at login** (`ui/autostart.py`): `HKCU\...\Run` on Windows, an XDG autostart `.desktop` file elsewhere.
+- **Log file** (`applog.py`): always on, rotating (1 MB × 5) in `paths.log_dir()`, with tokens masked.
+- **Diagnostics** (`diagnostics.py`; the window's button and `signal-archive-recorder diagnostics`): a zip of versions, audio inputs, settings, session states and logs. It holds no audio, decodes or token; the hostname, user, home folder, callsign and grid are redacted.
+- **Clean exits:** Ctrl-C, SIGTERM (logout) and Ctrl-Break end the desktop app with the session saved (`QuitOnSignals`; a timer lets Python's signal handlers run inside Qt's loop).
+- Slow work runs off the UI thread through `ui/worker.py` `in_background`, whose results are dropped if the window that asked has been closed.
+- Tests: `tests/unit/test_hardening_h1.py`, including the setup window end to end with fakes and a real desktop-app subprocess that records from a WAV and saves its session on SIGTERM.
+
+**H2: Windows installer.** PyInstaller (one folder) plus Inno Setup: a per-user install with no admin rights, a Start-menu entry, start at login, and an uninstaller. Built by GitHub Actions on version tags. CI smoke-tests the installed app against the fake WSJT-X emitter.
+
+**H3: Linux packages.**
+- **AUR:** `signal-archive-recorder`, using Arch's packages (all in `extra` except `python-sounddevice` and `python-ntplib`, which come from the AUR).
+- **.deb:** self-contained under `/opt` (Debian and Ubuntu ship older Python libraries), depending on `libportaudio2`, `libsndfile1` and Qt's system libraries. Attached to each release and CI-tested on Debian 12/13 and Ubuntu 22.04/24.04.
+- Both get a desktop entry and an icon.
+
+**H4: the testing round.** `TESTING.md` for testers, GitHub issue templates (setup details plus the diagnostics zip), a setups-covered matrix, an announcement text, and a **v0.2.0-beta** release.
+
 ### Stage 10: More modes and sources (v0.4)
 
 This is where most multi-mode work lands. Build:

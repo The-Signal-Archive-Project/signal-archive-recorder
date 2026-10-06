@@ -235,3 +235,14 @@ def save(session_dir: Path, results: list[ChunkScreen]) -> None:
     (session_dir / "local").mkdir(exist_ok=True)
     data = [asdict(r) for r in results]
     (session_dir / "local" / "screening.json").write_text(json.dumps(data, indent=2), "utf-8")
+
+
+def format_screens(results: list[ChunkScreen]) -> list[str]:
+    """The radio-audio verdicts as lines of text (for `review` and the review window)."""
+    lines = ["  Radio-audio checks:"]
+    for s in results:
+        mark = "ok      " if s.eligible else "KEEP BACK"
+        evidence = f"{s.decodes_visible}/{s.decodes_checked} decodes found in the audio"
+        lines.append(f"    {mark} {s.chunk_id}  ({evidence})")
+        lines.extend(f"             - {note}" for note in s.reasons + s.warnings)
+    return lines
