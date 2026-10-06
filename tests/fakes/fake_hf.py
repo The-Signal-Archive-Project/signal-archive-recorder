@@ -20,6 +20,7 @@ from signal_archive_recorder.upload.hub import (
     ALLOW_PATTERNS,
     IGNORE_PATTERNS,
     InvalidTokenError,
+    PrNotFoundError,
     PrRef,
     PrStatus,
 )
@@ -44,6 +45,7 @@ class FakeHub:
         self.calls: list[str] = []
         self.fail_next_upload: Exception | None = None
         self.create_pr_then_fail = False  # PR made, then the connection drops
+        self.offline = False  # every status check fails, like a dropped connection
 
     def add_token(self, value: str, user: str = "volunteer", role: str = "write",
                   fine_grained: Any = None) -> Token:  # fmt: skip
@@ -94,5 +96,9 @@ class FakeHub:
     def pr_status(self, token: Token, repo_id: str, num: int) -> PrStatus:
         self.calls.append("pr_status")
         self._user(token)
+        if self.offline:
+            raise ConnectionError("network is unreachable")
+        if num > len(self.prs) or self.prs[num - 1].state == "deleted":
+            raise PrNotFoundError(f"pull request #{num} not found on {repo_id}")
         pr = self.prs[num - 1]
         return PrStatus(pr.state, list(pr.comments))

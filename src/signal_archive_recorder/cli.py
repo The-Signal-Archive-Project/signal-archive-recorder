@@ -14,7 +14,9 @@
     signal-archive-recorder review [SESSION]                what an upload would share
     signal-archive-recorder remove-chunk SESSION CHUNK      leave a chunk out
     signal-archive-recorder upload [SESSION ...]            one pull request per session
+    signal-archive-recorder upload --dry-run                what would be sent, sending nothing
     signal-archive-recorder status                          follow up open pull requests
+    signal-archive-recorder requeue SESSION                 upload a session again
 
 Exit codes: 0 fine, 2 configuration, 3 audio device, 4 Hugging Face login,
 5 consent needed, 6 some uploads didn't go through.
@@ -28,6 +30,7 @@ import dataclasses
 import getpass
 import logging
 import os
+import platform
 import signal
 import sys
 import threading
@@ -36,10 +39,15 @@ from pathlib import Path
 from types import FrameType
 
 from signal_archive_recorder import __version__
-from signal_archive_recorder.audio.device import DeviceUnavailableError, SoundDeviceBackend
+from signal_archive_recorder.audio.device import (
+    DeviceInfo,
+    DeviceUnavailableError,
+    SoundDeviceBackend,
+)
 from signal_archive_recorder.clockmon.monitor import ntplib_probe
 from signal_archive_recorder.config import ConfigError, RecorderConfig, load_config
 from signal_archive_recorder.core.clock import Clock, SystemClock
+from signal_archive_recorder.firstrun.devices import rank
 from signal_archive_recorder.firstrun.wizard import SetupCancelled, TerminalPrompter, Wizard
 from signal_archive_recorder.metadata.builder import MetadataBuilder
 from signal_archive_recorder.modes import ModeRegistry
@@ -47,7 +55,7 @@ from signal_archive_recorder.paths import config_dir, default_config_file, examp
 from signal_archive_recorder.recorder import Recorder
 from signal_archive_recorder.session.storage import SessionStorage
 from signal_archive_recorder.upload.consent import CONSENT_TEXT, ConsentStore, NoConsentError
-from signal_archive_recorder.upload.hub import HfHub, Hub, HubError, check_token
+from signal_archive_recorder.upload.hub import DEFAULT_REPO, HfHub, Hub, HubError, check_token
 from signal_archive_recorder.upload.queue import NotLoggedInError, Uploader, UploadState
 from signal_archive_recorder.upload.review import ReviewError, format_review, review
 from signal_archive_recorder.upload.token import KeyringUnavailableError, Token, TokenStore
@@ -227,8 +235,29 @@ def cmd_devices(args: argparse.Namespace) -> int:
     except (DeviceUnavailableError, OSError) as exc:
         print(f"audio system unavailable: {exc}", file=sys.stderr)
         return EXIT_DEVICE
-    for d in devices:
-        print(f"{d.name}  [{d.host_api}, {d.max_input_channels} ch, {d.default_sample_rate} Hz]")
+
+    def line(d: DeviceInfo) -> str:
+        return f"{d.name}  [{d.host_api}, {d.max_input_channels} ch, {d.default_sample_rate} Hz]"
+
+    if args.all:
+        for d in devices:
+            print(line(d))
+        return 0
+    ranked = rank(devices, platform.system())
+    groups = (
+        ("Recommended:", [c for c in ranked if c.recommended]),
+        ("Other inputs:", [c for c in ranked if not c.recommended]),
+    )
+    for heading, group in groups:
+        if group:
+            print(heading)
+        for c in group:
+            print(f"  {line(c.device)}")
+            for reason in c.reasons:
+                print(f"      {reason}")
+    hidden = len(devices) - len(ranked)
+    if hidden:
+        print(f"({hidden} system-plumbing entries hidden; --all shows everything)")
     return 0
 
 
@@ -302,9 +331,17 @@ def cmd_remove_chunk(args: argparse.Namespace) -> int:
     return 0
 
 
+def _repo_note(config: RecorderConfig) -> None:
+    if config.upload.repo != DEFAULT_REPO:
+        print(f"(uploading to the TEST repository {config.upload.repo}, not {DEFAULT_REPO})")
+
+
 def cmd_upload(args: argparse.Namespace) -> int:
     config = _config(args.config)
     uploader = _uploader(config)
+    _repo_note(config)
+    if args.dry_run:
+        return _dry_run(config, uploader, args.sessions)
     try:
         if args.sessions:
             results = [(d, uploader.upload(d))
@@ -333,11 +370,55 @@ def cmd_upload(args: argparse.Namespace) -> int:
     return EXIT_UPLOAD if trouble else 0
 
 
+def _dry_run(config: RecorderConfig, uploader: Uploader, sessions: list[str]) -> int:
+    if sessions:
+        targets = [_session_dir(config, s) for s in sessions]
+    else:
+        targets = [
+            d
+            for d, r in uploader.sessions()
+            if r.state is UploadState.QUEUED and review(d).finished
+        ]
+    if not targets:
+        print("Nothing to upload.")
+    trouble = False
+    try:
+        for session_dir in targets:
+            plan = uploader.dry_run(session_dir)
+            total = sum(size for _, size in plan.files)
+            print(f"{session_dir.name}: would open a pull request on {plan.repo_id}")
+            print(f"  title: {plan.title}")
+            print(f"  {len(plan.files)} files, {total / 1e6:.1f} MB, into {plan.path_in_repo}/")
+            for name, size in plan.files:
+                print(f"    {name}  ({size:,} bytes)")
+            if plan.problems:
+                trouble = True
+                print("  but it would be blocked:")
+                print("".join(f"    - {p}\n" for p in plan.problems), end="")
+    except NoConsentError as exc:
+        print(str(exc), file=sys.stderr)
+        return EXIT_CONSENT
+    except (HubError, KeyringUnavailableError) as exc:
+        print(str(exc), file=sys.stderr)
+        return EXIT_LOGIN
+    print("Dry run: nothing was sent.")
+    return EXIT_UPLOAD if trouble else 0
+
+
+def cmd_requeue(args: argparse.Namespace) -> int:
+    config = _config(args.config)
+    record = _uploader(config).requeue(_session_dir(config, args.session))
+    print(f"{args.session} is {record.state.value} again.")
+    print("Send it with: signal-archive-recorder upload")
+    return 0
+
+
 def cmd_status(args: argparse.Namespace) -> int:
     config = _config(args.config)
     uploader = _uploader(config)
     with contextlib.suppress(NotLoggedInError):  # then list what's known locally
         uploader.poll_all()
+    _repo_note(config)
     for session_dir, record in uploader.sessions():
         line = f"{session_dir.name}  {record.state.value}"
         if record.pr_url:
@@ -345,6 +426,8 @@ def cmd_status(args: argparse.Namespace) -> int:
         print(line)
         for message in record.validator_messages + record.problems:
             print(f"    {message}")
+        if record.last_error:
+            print(f"    last attempt: {record.last_error}")
     return 0
 
 
@@ -372,7 +455,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--device", help="audio input name (default: ask)")
     p.add_argument("--force", action="store_true", help="replace an existing file")
     add("record", cmd_record, "record until Ctrl-C")
-    add("devices", cmd_devices, "list audio inputs")
+    p = add("devices", cmd_devices, "list audio inputs, recommended first")
+    p.add_argument("--all", action="store_true", help="every entry, unranked")
     p = add("consent", cmd_consent, "read and accept the contribution terms")
     p.add_argument("--yes", action="store_true", help="accept without the prompt")
     p.add_argument("--withdraw", action="store_true", help="withdraw consent")
@@ -386,6 +470,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("chunk")
     p = add("upload", cmd_upload, "upload finished sessions, one pull request each")
     p.add_argument("sessions", nargs="*")
+    p.add_argument("--dry-run", action="store_true", help="show what would be sent; send nothing")
+    p = add("requeue", cmd_requeue, "let a blocked, failed or missing session upload again")
+    p.add_argument("session")
     add("status", cmd_status, "follow up open pull requests")
     return parser
 

@@ -36,6 +36,10 @@ class TokenPermissionError(HubError):
     pass
 
 
+class PrNotFoundError(HubError):
+    """The pull request (or the whole repository) no longer exists."""
+
+
 @dataclass(frozen=True)
 class PrRef:
     num: int
@@ -177,9 +181,14 @@ class HfHub:
         return None
 
     def pr_status(self, token: Token, repo_id: str, num: int) -> PrStatus:
-        details = self._api.get_discussion_details(
-            repo_id=repo_id, discussion_num=num, repo_type="dataset", token=token.reveal()
-        )
+        try:
+            details = self._api.get_discussion_details(
+                repo_id=repo_id, discussion_num=num, repo_type="dataset", token=token.reveal()
+            )
+        except self._http_error as exc:
+            if getattr(getattr(exc, "response", None), "status_code", None) == 404:
+                raise PrNotFoundError(f"pull request #{num} not found on {repo_id}") from None
+            raise
         comments = [e.content for e in details.events if getattr(e, "type", "") == "comment"]
         return PrStatus(str(details.status), comments)
 
