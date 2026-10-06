@@ -10,6 +10,7 @@ Each session's state lives in its local/upload.json:
                                      -> failed      (the intake validator rejected it)
     queued <- (any error while uploading: kept, retried later)
     blocked                          (preflight found a problem; fix it, then re-queue)
+    pr_missing                       (the PR was deleted on Hugging Face; re-queue to resend)
 
 Local files are never deleted here. A failed attempt leaves everything in place
 and the session queued. Before opening a PR, an existing open PR for the same
@@ -29,8 +30,8 @@ from typing import Any
 from signal_archive_recorder.core.clock import Clock
 from signal_archive_recorder.session.storage import SessionStorage, write_json_atomic
 from signal_archive_recorder.upload.consent import ConsentStore
-from signal_archive_recorder.upload.hub import DEFAULT_REPO, Hub, check_token
-from signal_archive_recorder.upload.review import preflight, review
+from signal_archive_recorder.upload.hub import DEFAULT_REPO, Hub, PrNotFoundError, check_token
+from signal_archive_recorder.upload.review import preflight, review, upload_files
 from signal_archive_recorder.upload.token import Token, TokenStore, scrub_token
 from signal_archive_recorder.upload.validator import latest_verdict
 
@@ -44,6 +45,7 @@ class UploadState(StrEnum):
     VALIDATED = "validated"
     FAILED = "failed"
     BLOCKED = "blocked"
+    PR_MISSING = "pr_missing"  # the PR (or the repository) was deleted on Hugging Face
 
 
 class NotLoggedInError(RuntimeError):
@@ -81,6 +83,16 @@ class UploadRecord:
         data: dict[str, Any] = asdict(self)
         data["state"] = self.state.value
         write_json_atomic(session_dir / "local" / "upload.json", data)
+
+
+@dataclass(frozen=True)
+class DryRun:
+    repo_id: str
+    path_in_repo: str
+    title: str
+    files: list[tuple[str, int]]
+    problems: list[str]
+    username: str | None
 
 
 def pr_title(path_in_repo: str) -> str:
@@ -177,8 +189,23 @@ class Uploader:
         record = UploadRecord.load(session_dir)
         if record.state is not UploadState.PR_OPENED or record.pr_num is None:
             return record
-        status = self.hub.pr_status(self._token(), self.repo_id, record.pr_num)
-        record.pr_state = status.state
+        token = self._token()
+        try:
+            status = self.hub.pr_status(token, self.repo_id, record.pr_num)
+        except PrNotFoundError:
+            record.state, record.pr_state = UploadState.PR_MISSING, "missing"
+            record.validator_messages = [
+                f"Pull request #{record.pr_num} no longer exists on {self.repo_id}. To send "
+                f"this session again: signal-archive-recorder requeue {session_dir.name}"
+            ]
+            record.save(session_dir, self.clock.now_ns())
+            return record
+        except Exception as exc:  # offline, Hugging Face down: try again next time
+            record.last_error = scrub_token(f"{type(exc).__name__}: {exc}", token)
+            record.save(session_dir, self.clock.now_ns())
+            log.warning("couldn't check %s: %s", session_dir.name, record.last_error)
+            return record
+        record.pr_state, record.last_error = status.state, None
         verdict = latest_verdict(status.comments)
         if verdict is not None:
             record.state = UploadState.VALIDATED if verdict.passed else UploadState.FAILED
@@ -207,9 +234,20 @@ class Uploader:
         """After fixing a blocked or failed session, let it upload again."""
         record = UploadRecord.load(session_dir)
         record.state, record.problems = UploadState.QUEUED, []
-        record.pr_num = record.pr_url = record.pr_state = None
+        record.pr_num = record.pr_url = record.pr_state = record.last_error = None
+        record.validator_messages = []
         record.save(session_dir, self.clock.now_ns())
         return record
+
+    def dry_run(self, session_dir: Path) -> DryRun:
+        """Everything an upload would do, except sending anything."""
+        self.consent.require()
+        token = self.tokens.get()
+        username = check_token(self.hub, token, self.repo_id).username if token else None
+        files = [(p.relative_to(session_dir).as_posix(), p.stat().st_size)
+                 for p in upload_files(session_dir)]  # fmt: skip
+        path = f"contributions/{username or '<your-hf-username>'}/{session_dir.name}"
+        return DryRun(self.repo_id, path, pr_title(path), files, preflight(session_dir), username)
 
     def upload_all(self) -> list[tuple[Path, UploadRecord]]:
         results = []

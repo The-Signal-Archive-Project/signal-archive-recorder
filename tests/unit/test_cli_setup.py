@@ -88,3 +88,25 @@ def test_missing_keyring_explains_what_to_do(monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.setattr("platform.system", lambda: "Linux")
     with pytest.raises(KeyringUnavailableError, match="gnome-keyring"):
         _SystemKeyring().set_password("s", "u", "p")
+
+
+def test_devices_are_ranked(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from signal_archive_recorder.audio.device import DeviceInfo
+    from tests.fakes.fake_audio import FakeBackend
+
+    devices = [
+        DeviceInfo(0, "HDA Intel PCH: ALC236 Analog (hw:0,0)", "ALSA", 2, 44_100),
+        DeviceInfo(1, "lavrate", "ALSA", 128, 44_100),
+        DeviceInfo(2, "pipewire", "ALSA", 128, 44_100),
+    ]
+    monkeypatch.setattr(cli, "SoundDeviceBackend", lambda: FakeBackend(devices))
+    monkeypatch.setattr("platform.system", lambda: "Linux")
+    assert cli.main(["devices"]) == 0
+    out = capsys.readouterr().out
+    assert out.index("Recommended:") < out.index("pipewire") < out.index("Other inputs:")
+    assert "lavrate" not in out and "1 system-plumbing entries hidden" in out
+    assert "lock the card" in out
+    assert cli.main(["devices", "--all"]) == 0
+    assert "lavrate" in capsys.readouterr().out

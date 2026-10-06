@@ -69,8 +69,10 @@ signal-archive-recorder consent          # read and accept the terms (CC BY 4.0)
 signal-archive-recorder login            # paste a Hugging Face "Write" token (huggingface.co/settings/tokens)
 signal-archive-recorder review           # see exactly what would be shared
 signal-archive-recorder remove-chunk SESSION CHUNK   # optional: leave a chunk out
+signal-archive-recorder upload --dry-run # see exactly what would be sent, sending nothing
 signal-archive-recorder upload           # one pull request per session
 signal-archive-recorder status           # follow up the pull requests
+signal-archive-recorder requeue SESSION  # send a session again (e.g. if its PR was deleted)
 ```
 
 ### No radio?

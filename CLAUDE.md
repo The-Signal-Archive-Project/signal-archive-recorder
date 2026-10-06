@@ -339,6 +339,16 @@ Exit tests (fake Hugging Face `tests/fakes/fake_hf.py`, which uses `huggingface_
 - `test_review_shows_what_is_shared`.
 - Manual: `login` with a real token, then the first real `upload` to `signal-archive-project/signal-archive-intake`.
 
+### Testing uploads against Hugging Face
+
+**Never test-upload to the production intake repo.** On 2026-10-06 a 20 s test of the laptop microphone was uploaded and merged into `signal-archive-intake`. The repo had to be deleted and recreated to remove it from git history.
+
+- **Use the test repository**, `signal-archive-project/signal-archive-intake-test`. It's set up exactly like production (public, ungated, CC-BY-4.0), its card says the data is test data that may be wiped at any time, and it can be deleted and recreated whenever needed.
+- **Keep a separate dev config and archive.** Use `--config ~/.config/signal-archive-recorder/dev.toml` with `[storage] root = "~/SignalArchive-dev"` and `[upload] repo = "signal-archive-project/signal-archive-intake-test"`. The CLI labels any non-production repo as `TEST repository`.
+- **Test audio is never a room microphone.** Use real radio receive audio, or `[audio] file =` with a reference WAV, plus `tools/fake_wsjtx_emitter.py --replay` for realistic WSJT-X metadata.
+- **Run `upload --dry-run` first.**
+- **If a PR is deleted on Hugging Face,** `status` marks the session `pr_missing`, and `requeue SESSION` lets it upload again. A failed check (offline) leaves the PR state as it was, with `last_error` recorded.
+
 ### First-run setup (added after Stage 8)
 
 `signal-archive-recorder` with no arguments runs the setup wizard when there's no config, and otherwise records. Without a terminal, it prints how to set up instead of prompting.

@@ -350,3 +350,93 @@ def test_review_shows_what_is_shared(
     assert cli.main(["review", session.name, "--config", str(env["config"])]) == 0
     out = capsys.readouterr().out
     assert "callsign: not shared" in out and "grid: EN52" in out and "20m" in out
+
+
+# -- robustness: deleted PRs, offline checks, dry runs ----------------------------
+
+
+def test_deleted_pr_is_reported_not_a_crash(
+    env: dict[str, Any], capsys: pytest.CaptureFixture[str]
+) -> None:
+    session = make_session(env["root"])
+    up = uploader(env)
+    up.upload(session)
+    env["hub"].prs[0].state = "deleted"  # e.g. the repository was wiped and recreated
+    assert cli.main(["status", "--config", str(env["config"])]) == 0
+    out = capsys.readouterr().out
+    assert "pr_missing" in out and f"requeue {session.name}" in out
+    assert UploadRecord.load(session).state is UploadState.PR_MISSING
+
+    assert cli.main(["requeue", session.name, "--config", str(env["config"])]) == 0
+    record = UploadRecord.load(session)
+    assert record.state is UploadState.QUEUED and record.pr_num is None
+    assert record.validator_messages == []
+    assert up.upload(session).pr_num == 2  # a fresh PR
+
+
+def test_offline_status_check_keeps_the_pr(env: dict[str, Any],
+                                           capsys: pytest.CaptureFixture[str]) -> None:  # fmt: skip
+    session = make_session(env["root"])
+    up = uploader(env)
+    up.upload(session)
+    env["hub"].offline = True
+    assert cli.main(["status", "--config", str(env["config"])]) == 0
+    record = UploadRecord.load(session)
+    assert record.state is UploadState.PR_OPENED  # still open; try again later
+    assert "ConnectionError" in (record.last_error or "")
+    assert "last attempt" in capsys.readouterr().out
+    env["hub"].offline = False
+    assert up.poll(session).last_error is None
+
+
+def test_one_bad_session_does_not_stop_the_others(env: dict[str, Any]) -> None:
+    a = make_session(env["root"])
+    b = make_session(env["root"], seconds=30, start="15:00:00")
+    up = uploader(env)
+    up.upload_all()
+    env["hub"].prs[0].state = "deleted"
+    env["hub"].prs[1].comments.append(
+        '```signal-archive-validator\n{"result": "pass", "messages": []}\n```'
+    )
+    states = {d.name: r.state for d, r in up.poll_all()}
+    assert states == {a.name: UploadState.PR_MISSING, b.name: UploadState.VALIDATED}
+
+
+def test_dry_run_sends_nothing(env: dict[str, Any], capsys: pytest.CaptureFixture[str]) -> None:
+    session = make_session(env["root"])
+    uploader(env)  # consent and login
+    assert cli.main(["upload", "--dry-run", "--config", str(env["config"])]) == 0
+    out = capsys.readouterr().out
+    assert f"contributions/volunteer/{session.name}/" in out
+    assert "recordings/" in out and "session.json" in out and "local/" not in out
+    assert "Dry run: nothing was sent." in out
+    assert env["hub"].prs == [] and "open_pr" not in env["hub"].calls
+    assert not (session / "local" / "upload.json").exists()  # no state changed
+
+
+def test_dry_run_shows_what_would_block(env: dict[str, Any],
+                                        capsys: pytest.CaptureFixture[str]) -> None:  # fmt: skip
+    session = make_session(env["root"])
+    flac = next((session / "recordings").glob("*.flac"))
+    data = bytearray(flac.read_bytes())
+    data[len(data) // 2] ^= 0x10
+    flac.write_bytes(bytes(data))
+    uploader(env)
+    assert cli.main(["upload", "--dry-run", session.name, "--config", str(env["config"])]) == 6
+    assert "would be blocked" in capsys.readouterr().out
+
+
+def test_test_repository_is_labelled(
+    env: dict[str, Any], capsys: pytest.CaptureFixture[str]
+) -> None:
+    text = (
+        env["config"].read_text()
+        + '[upload]\nrepo = "signal-archive-project/signal-archive-intake-test"\n'
+    )
+    env["config"].write_text(text)
+    uploader(env)
+    cli.main(["upload", "--dry-run", "--config", str(env["config"])])
+    assert (
+        "TEST repository signal-archive-project/signal-archive-intake-test"
+        in capsys.readouterr().out
+    )
