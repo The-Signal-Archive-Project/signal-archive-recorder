@@ -8,6 +8,7 @@
     signal-archive-recorder setup                           run first-run setup again
     signal-archive-recorder init                            create a starter configuration
     signal-archive-recorder record                          record until Ctrl-C
+    signal-archive-recorder tray                            record, with a window and tray icon
     signal-archive-recorder devices                         list audio inputs
     signal-archive-recorder consent                         read and accept the terms
     signal-archive-recorder login                           store a Hugging Face token
@@ -121,12 +122,42 @@ def _session_dir(config: RecorderConfig, session_id: str) -> Path:
 # -- commands -----------------------------------------------------------------------
 
 
-def cmd_record(args: argparse.Namespace) -> int:
-    config = _config(args.config)
+def _with_consent(config: RecorderConfig) -> RecorderConfig:
+    """Record the operator's current consent with each new session."""
     consent = _consent().load()
-    if consent is not None and consent.is_current():  # recorded with the session
-        station = dataclasses.replace(config.station, consent=consent.as_consent())
-        config = dataclasses.replace(config, station=station)
+    if consent is None or not consent.is_current():
+        return config
+    station = dataclasses.replace(config.station, consent=consent.as_consent())
+    return dataclasses.replace(config, station=station)
+
+
+GUI_HINT = (
+    "The window needs the optional GUI part. Install it with:\n"
+    '  pipx install --force "signal-archive-recorder[gui] @ '
+    'git+https://github.com/The-Signal-Archive-Project/signal-archive-recorder"'
+)
+
+
+def cmd_tray(args: argparse.Namespace) -> int:
+    path: Path = args.config or default_config_file()
+    if not path.exists():
+        hint = "Run `signal-archive-recorder setup` first."
+        print(f"No configuration yet ({path}). {hint}", file=sys.stderr)
+        return EXIT_CONFIG
+    try:
+        from signal_archive_recorder.ui.app import run
+    except ImportError:
+        print(GUI_HINT, file=sys.stderr)
+        return EXIT_CONFIG
+    from signal_archive_recorder.ui.controller import RecorderController
+
+    config = _with_consent(_config(path))
+    controller = RecorderController(config)
+    return run(controller, recordings=config.storage_root / "sessions", settings=path)
+
+
+def cmd_record(args: argparse.Namespace) -> int:
+    config = _with_consent(_config(args.config))
     stop = threading.Event()
 
     def handler(signum: int, _frame: FrameType | None) -> None:
@@ -508,6 +539,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--device", help="audio input name (default: ask)")
     p.add_argument("--force", action="store_true", help="replace an existing file")
     add("record", cmd_record, "record until Ctrl-C")
+    add("tray", cmd_tray, "record with a status window and tray icon (needs the gui extra)")
     p = add("devices", cmd_devices, "list audio inputs, recommended first")
     p.add_argument("--all", action="store_true", help="every entry, unranked")
     p = add("consent", cmd_consent, "read and accept the contribution terms")
