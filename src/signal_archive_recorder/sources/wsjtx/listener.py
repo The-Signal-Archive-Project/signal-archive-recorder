@@ -305,5 +305,6 @@ class WsjtxListener:
             "off_air": event.off_air,
             "raw": dict(event.raw),
         }
+        self._decode_log.parent.mkdir(parents=True, exist_ok=True)
         with self._decode_log.open("a", encoding="utf-8") as f:
             f.write(json.dumps(line, ensure_ascii=False) + "\n")

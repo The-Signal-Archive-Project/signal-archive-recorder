@@ -282,3 +282,18 @@ def test_missing_device_fails_cleanly(tmp_path: Path) -> None:
     with pytest.raises(DeviceUnavailableError, match="Fake Radio Codec"):
         Recorder(config, backend=FakeBackend([DEVICE])).start()
     assert not (tmp_path / "sessions").exists() or not any((tmp_path / "sessions").iterdir())
+
+
+def test_no_labels_without_a_decoder(tmp_path: Path) -> None:
+    """WSJT-X listening but never running: no empty labels/ folder, no label source."""
+    clock = FakeClock(utc_ns("12:03:07"))
+    backend = FakeBackend([DEVICE], noise(FMT, 5), on_block=lambda n: clock.advance(n * S // 8000))
+    recorder = Recorder(
+        make_config(tmp_path, buffer_seconds=60), backend=backend, clock=clock, ntp_probe=fake_ntp
+    )
+    session = recorder.start()
+    assert backend.stream is not None
+    backend.stream.pump()
+    recorder.stop()
+    assert not session.labels.exists()
+    assert json.loads(session.session_json.read_text())["labels"] == []
