@@ -27,6 +27,7 @@ from referencing import Registry, Resource
 
 from signal_archive_recorder import __version__
 from signal_archive_recorder.clockmon.monitor import DEFAULT_SERVERS
+from signal_archive_recorder.metadata import rights
 from signal_archive_recorder.metadata.privacy import DecodeRedactor, Scrubber
 from signal_archive_recorder.metadata.settings import StationSettings
 from signal_archive_recorder.modes.registry import ModeRegistry
@@ -165,6 +166,7 @@ class MetadataBuilder:
                 "params": self._mode_params(rec["mode"]) if mode_value else {},
             },
             "path": {"type": known(None, SOURCE_UNAVAILABLE)},  # set by satellite sources
+            "rights": rec.get("rights") or rights.rights(self.settings),
             "clock": {
                 "previous_check": None
                 if rec.get("clock_before") is None
@@ -329,6 +331,11 @@ class MetadataBuilder:
         for field in set(ev) - set(out) - {"stream_frame", "message"}:
             self._drop(f"event field {kind}.{field}")
         return out
+
+    def flac_tags(self, *, session_id: str, chunk_id: str, first_sample_ns: int) -> dict[str, str]:
+        return rights.flac_tags(
+            self.settings, session_id=session_id, chunk_id=chunk_id, first_sample_ns=first_sample_ns
+        )
 
     def _clock_check(self, check: dict[str, Any], start_frame: int) -> dict[str, Any]:
         server = check.get("server")

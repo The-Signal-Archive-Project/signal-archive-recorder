@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -21,6 +22,7 @@ import soundfile as sf
 
 from signal_archive_recorder.audio.flac_writer import (
     PARTIAL_SUFFIX,
+    TAG_NAMES,
     FlacResult,
     FlacWriter,
     array_to_raw,
@@ -105,6 +107,33 @@ def parse_stream_info(buf: bytes) -> StreamInfo:
         pos += 4 + int.from_bytes(buf[pos + 1 : pos + 4], "big")
         if last:
             return StreamInfo(sample_rate, channels, bits, pos)
+
+
+def parse_tags(buf: bytes) -> dict[str, str]:
+    """The VORBIS_COMMENT block's fields that FlacWriter can write back, if present."""
+    tags: dict[str, str] = {}
+    pos = 4
+    while pos + 4 <= len(buf):
+        header, size = buf[pos], int.from_bytes(buf[pos + 1 : pos + 4], "big")
+        block = buf[pos + 4 : pos + 4 + size]
+        if header & 0x7F == 4 and len(block) == size:  # little-endian lengths inside
+            vendor = int.from_bytes(block[:4], "little")
+            i = 4 + vendor
+            count = int.from_bytes(block[i : i + 4], "little")
+            i += 4
+            for _ in range(count):
+                n = int.from_bytes(block[i : i + 4], "little")
+                key, _, value = block[i + 4 : i + 4 + n].decode("utf-8", "replace").partition("=")
+                i += 4 + n
+                if key.lower() in TAG_NAMES:
+                    tags[key.lower()] = value
+        pos += 4 + size
+        if header & 0x80:
+            break
+    # libsndfile appends its own name to "software"; don't let it pile up on re-encode.
+    if "software" in tags:
+        tags["software"] = re.sub(r" \(libsndfile-[^)]*\)$", "", tags["software"])
+    return tags
 
 
 def parse_frame_header(buf: bytes, pos: int) -> tuple[FrameHeader, int] | None:
@@ -209,7 +238,7 @@ def recover_partial(partial: Path) -> Recovery:
     scratch = final.with_name(final.name + ".scan.flac")
     scratch.write_bytes(bytes(patched))
     try:
-        writer = FlacWriter(final, fmt)
+        writer = FlacWriter(final, fmt, tags=parse_tags(buf))  # keep the original credit
         with sf.SoundFile(scratch) as f:
             while len(block := f.read(65_536, dtype=_dtype(fmt), always_2d=True)):
                 writer.write(array_to_raw(block, fmt))

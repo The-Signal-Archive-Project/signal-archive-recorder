@@ -249,6 +249,7 @@ Build:
 - `metadata/privacy.py`: `Scrubber` (hostname, user, home and absolute paths, device names) for the few free-text fields, and `DecodeRedactor` for the operator's own call and grid.
 - `metadata/settings.py` `StationSettings`: callsign plus `share_callsign`, grid plus `grid_precision`, HF username, station profile and consent.
 - Values no source ever reported are `source_unavailable`. `not_reported` means the source is up but didn't say.
+- **Rights (`metadata/rights.py`):** recordings are contributed under **CC BY 4.0**. Every FLAC gets Vorbis comments: `LICENSE`, `COPYRIGHT`, `ARTIST` (the contributor's callsign only if shared, otherwise "Signal Archive Project contributor"), `TITLE`/`ALBUM` (chunk and session ids), `DATE`, `COMMENT` and `SOFTWARE`. They're written into the header before any audio, so the audio MD5 is unchanged and the SHA-256 covers them. Each chunk's metadata carries the same information in `rights`. Recovery re-encodes with the crashed file's own tags, so the original credit is kept.
 
 Exit tests:
 - `test_session_and_chunk_validate` (contract test, every registered mode).
@@ -305,6 +306,8 @@ Exit tests:
 **→ Tag v0.1.**
 
 ### Stage 8: Consent, token and upload (v0.2)
+
+Target: the Hugging Face **dataset** repo `signal-archive-project/signal-archive-intake`, licensed CC-BY-4.0 and **ungated**, so volunteers can open PRs without requesting access. Each session is one PR, validated before it's merged. A curated, gated public dataset (with a Zenodo concept DOI and versioned releases) is built from the reviewed intake later, and a Hugging Face collection groups the project's repos. Consent and license text are versioned (`license_id`, `consent_version`), so the wording can change without a code change.
 
 Build:
 - `consent.py`: license text, acceptance stored with timestamp and license ID
