@@ -130,6 +130,10 @@ class ModeRegistry:
             )
             if mode.id in self._modes:
                 raise RegistryError(f"duplicate mode id {mode.id!r}")
+            if mode.params_schema and not (
+                files(__package__).joinpath("schemas", mode.params_schema).is_file()
+            ):
+                raise RegistryError(f"{mode.id}: params schema {mode.params_schema} is missing")
             self._modes[mode.id] = mode
             for source, raws in mode.aliases.items():
                 for raw in raws:

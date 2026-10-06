@@ -1,0 +1,26 @@
+{
+  "description": "Amateur bands by dial frequency (Hz), using the widest allocation across IARU regions. A frequency outside every band has band null with reason not_applicable.",
+  "bands": [
+    { "band": "2200m", "low_hz": 135700, "high_hz": 137800 },
+    { "band": "630m", "low_hz": 472000, "high_hz": 479000 },
+    { "band": "160m", "low_hz": 1800000, "high_hz": 2000000 },
+    { "band": "80m", "low_hz": 3500000, "high_hz": 4000000 },
+    { "band": "60m", "low_hz": 5250000, "high_hz": 5450000 },
+    { "band": "40m", "low_hz": 7000000, "high_hz": 7300000 },
+    { "band": "30m", "low_hz": 10100000, "high_hz": 10150000 },
+    { "band": "20m", "low_hz": 14000000, "high_hz": 14350000 },
+    { "band": "17m", "low_hz": 18068000, "high_hz": 18168000 },
+    { "band": "15m", "low_hz": 21000000, "high_hz": 21450000 },
+    { "band": "12m", "low_hz": 24890000, "high_hz": 24990000 },
+    { "band": "10m", "low_hz": 28000000, "high_hz": 29700000 },
+    { "band": "6m", "low_hz": 50000000, "high_hz": 54000000 },
+    { "band": "4m", "low_hz": 70000000, "high_hz": 71000000 },
+    { "band": "2m", "low_hz": 144000000, "high_hz": 148000000 },
+    { "band": "1.25m", "low_hz": 222000000, "high_hz": 225000000 },
+    { "band": "70cm", "low_hz": 420000000, "high_hz": 450000000 },
+    { "band": "33cm", "low_hz": 902000000, "high_hz": 928000000 },
+    { "band": "23cm", "low_hz": 1240000000, "high_hz": 1300000000 },
+    { "band": "13cm", "low_hz": 2300000000, "high_hz": 2450000000 },
+    { "band": "3cm", "low_hz": 10000000000, "high_hz": 10500000000 }
+  ]
+}

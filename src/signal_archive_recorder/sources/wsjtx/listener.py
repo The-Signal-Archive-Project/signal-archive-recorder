@@ -225,7 +225,14 @@ class WsjtxListener:
                 raw_mode=s.mode or "",
                 needs_mapping=res.needs_mapping,
                 period_s=float(s.tr_period_s) if s.tr_period_s is not None else None,
-                extra_raw={"sub_mode": s.sub_mode, "freq_tolerance_hz": s.freq_tolerance_hz},
+                params={
+                    k: v
+                    for k, v in (
+                        ("sub_mode", s.sub_mode),
+                        ("freq_tolerance_hz", s.freq_tolerance_hz),
+                    )
+                    if v is not None
+                },
             )
         if s.transmitting != state.transmitting:
             state.transmitting = s.transmitting
