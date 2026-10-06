@@ -4,7 +4,7 @@ All notable changes to Signal Archive Recorder. Versions follow [semantic versio
 
 ## [Unreleased]
 
-## [0.1.2] - 2026-10-06
+## [0.2.0] - 2026-10-06
 
 ### Uploads
 - **Resumable uploads:** a session goes up in steps within its one pull request (each chunk, then labels and `session.json`). If the connection drops, the next attempt sends only what's missing.
@@ -76,6 +76,6 @@ The first release. It records bit-exact receive audio from a ham station, labels
 - No GPL dependencies (enforced in CI); DCO sign-off on every commit.
 - CI on Linux and Windows with Python 3.11 and 3.14.
 
-[Unreleased]: https://github.com/The-Signal-Archive-Project/signal-archive-recorder/compare/v0.1.2...HEAD
-[0.1.2]: https://github.com/The-Signal-Archive-Project/signal-archive-recorder/compare/v0.1.0...v0.1.2
+[Unreleased]: https://github.com/The-Signal-Archive-Project/signal-archive-recorder/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/The-Signal-Archive-Project/signal-archive-recorder/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/The-Signal-Archive-Project/signal-archive-recorder/releases/tag/v0.1.0
