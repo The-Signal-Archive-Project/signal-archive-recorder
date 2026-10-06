@@ -124,3 +124,10 @@ def test_get_by_id(registry: ModeRegistry) -> None:
     assert registry.get("wspr").display_name == "WSPR"
     with pytest.raises(KeyError):
         registry.get("nope")
+
+
+def test_missing_params_schema_rejected() -> None:
+    data = _raw_registry()
+    data["modes"][0]["params_schema"] = "nope_params.schema.json"
+    with pytest.raises(RegistryError, match="missing"):
+        ModeRegistry(data)

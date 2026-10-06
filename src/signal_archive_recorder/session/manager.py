@@ -24,7 +24,6 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-from signal_archive_recorder import __version__
 from signal_archive_recorder.audio.flac_writer import FlacResult, FlacWriter
 from signal_archive_recorder.audio.format import AudioFormat
 from signal_archive_recorder.audio.levels import LevelMeter
@@ -45,13 +44,14 @@ from signal_archive_recorder.core.events import (
     TxEnded,
     TxStarted,
 )
+from signal_archive_recorder.metadata.builder import MetadataBuilder, MetadataError
+from signal_archive_recorder.metadata.settings import StationSettings
 from signal_archive_recorder.modes import DEFAULT_CHUNK_S, ChunkPolicy, ModeRegistry
 from signal_archive_recorder.session.storage import SessionDir, SessionStorage, write_json_atomic
 
 log = logging.getLogger(__name__)
 
 SOURCE_UNAVAILABLE = "source_unavailable"
-NOT_REPORTED = "not_reported"
 
 
 @dataclass(frozen=True)
@@ -82,6 +82,7 @@ class _Chunk:
     dial: dict[str, Any]
     sources_up: dict[str, bool]
     levels: LevelMeter
+    settings: dict[str, dict[str, Any]] = field(default_factory=dict)
     writer: FlacWriter | None = None
     chunk_id: str = ""
     first_written: int | None = None
@@ -94,6 +95,7 @@ class _Chunk:
     gaps: list[dict[str, Any]] = field(default_factory=list)
     decodes_live: int = 0
     decodes_off_air: int = 0
+    live_dt_s: list[float] = field(default_factory=list)
 
 
 class SessionManager:
@@ -109,6 +111,7 @@ class SessionManager:
         target_chunk_s: int = DEFAULT_CHUNK_S,
         holdback_s: float = 2.0,
         compression_level: int = 8,
+        builder: MetadataBuilder | None = None,
     ) -> None:
         self.format = fmt
         self._storage = storage
@@ -119,6 +122,7 @@ class SessionManager:
         self._target_s = target_chunk_s
         self._holdback = round(holdback_s * fmt.sample_rate)
         self._compression = compression_level
+        self.builder = builder or MetadataBuilder(registry, StationSettings())
         self._lock = threading.RLock()
 
         self.session: SessionDir | None = None
@@ -137,6 +141,8 @@ class SessionManager:
         self._mode: Known | None = None
         self._dial: Known | None = None
         self._up: dict[str, bool] = {}
+        self._settings: dict[str, Known] = {}
+        self.software: dict[str, str] = {}
         self._tx = False
         self._finalizer = ThreadPoolExecutor(max_workers=1, thread_name_prefix="chunk-final")
         self._futures: list[Future[dict[str, Any]]] = []
@@ -165,6 +171,10 @@ class SessionManager:
         for future in self._futures:
             future.result()
         self._finalizer.shutdown(wait=True)
+        assert self.session is not None
+        # Sources must be stopped first: decode logs are rewritten for publication.
+        for decode_log in sorted(self.session.path.glob("*_decodes.jsonl")):
+            self.builder.publish_decode_log(decode_log)
         self._write_session(ended_ns=self._clock.now_ns(), end_reason=end_reason)
         return self.chunks
 
@@ -286,10 +296,19 @@ class SessionManager:
         if isinstance(e, FreqChanged):
             self._dial = Known(e.dial_hz, e.source)
         elif isinstance(e, ModeChanged):
-            detail = {"raw": e.raw_mode, "needs_mapping": e.needs_mapping, "period_s": e.period_s}
+            detail = {
+                "raw": e.raw_mode,
+                "needs_mapping": e.needs_mapping,
+                "period_s": e.period_s,
+                "params": dict(e.params),
+            }
             self._mode = Known(e.mode_id, e.source, detail)
+        elif isinstance(e, SettingChanged):
+            self._settings[e.name] = Known(e.value, e.source)
         elif isinstance(e, SourceUp):
             self._up[e.source] = True
+            if e.detail:
+                self.software.setdefault(e.source, e.detail)
             if chunk and e.source in chunk.down_open:
                 start, reason = chunk.down_open.pop(e.source)
                 chunk.down.setdefault(e.source, []).append([start, frame, reason])
@@ -317,6 +336,8 @@ class SessionManager:
                 chunk.decodes_off_air += 1
             else:
                 chunk.decodes_live += 1
+                if e.dt_s is not None:
+                    chunk.live_dt_s.append(e.dt_s)
             return
         chunk.events.append(self._event_record(change))
 
@@ -354,8 +375,8 @@ class SessionManager:
     # -- chunks ------------------------------------------------------------------
 
     def _known(self, known: Known | None) -> dict[str, Any]:
-        if known is None:
-            return {"value": None, "reason": NOT_REPORTED}
+        if known is None:  # no source has ever reported it
+            return {"value": None, "reason": SOURCE_UNAVAILABLE}
         if not self._up.get(known.source, False):
             return {"value": None, "reason": SOURCE_UNAVAILABLE, "source": known.source}
         return {"value": known.value, "reason": None, "source": known.source, **known.detail}
@@ -387,6 +408,7 @@ class SessionManager:
         """The chunk's starting values and policy, from the live state at its start."""
         chunk.mode = self._known(self._mode)
         chunk.dial = self._known(self._dial)
+        chunk.settings = {name: self._known(k) for name, k in self._settings.items()}
         chunk.sources_up = dict(self._up)
         policy = self._policy(chunk.mode)
         start_ns = self._timeline.frame_to_ns(chunk.start_frame)
@@ -441,15 +463,24 @@ class SessionManager:
         except Exception as exc:  # the chunk is reported as failed, never dropped silently
             log.exception("finalising chunk %s failed", chunk.chunk_id)
             audio["error"] = repr(exc)
-        meta = self._chunk_meta(chunk, audio, flac, session)
+        record = self._chunk_record(chunk, audio, flac, session)
+        try:
+            meta = self.builder.chunk(record)
+        except MetadataError:
+            # A bug, not bad luck: keep the record locally, and never publish it.
+            log.exception("chunk %s metadata failed validation", chunk.chunk_id)
+            invalid = session.path / f"{chunk.chunk_id}.meta.invalid.json"
+            write_json_atomic(invalid, record)
+            return record
         write_json_atomic(session.meta(chunk.chunk_id), meta)
         with self._lock:
             self.chunks.append(meta)
         return meta
 
-    def _chunk_meta(
+    def _chunk_record(
         self, chunk: _Chunk, audio: dict[str, Any], flac: FlacResult | None, session: SessionDir
     ) -> dict[str, Any]:
+        """The manager's full internal record; the builder decides what is published."""
         rel = chunk.start_frame
         levels = asdict(chunk.levels.snapshot())
         return {
@@ -475,6 +506,7 @@ class SessionManager:
             },
             "mode": chunk.mode,
             "dial_hz": chunk.dial,
+            "settings": chunk.settings,
             "tx_intervals": [[s - rel, e - rel] for s, e in chunk.tx_intervals],
             "sources": {
                 source: {
@@ -483,17 +515,22 @@ class SessionManager:
                 }
                 for source, spans in {**{s: [] for s in chunk.sources_up}, **chunk.down}.items()
             },
-            "decodes": {"live": chunk.decodes_live, "off_air": chunk.decodes_off_air},
+            "decodes": {
+                "live": chunk.decodes_live,
+                "off_air": chunk.decodes_off_air,
+                "live_dt_s": chunk.live_dt_s,
+            },
             "events": chunk.events,
         }
 
     def _write_session(self, *, ended_ns: int | None, end_reason: str | None) -> None:
         assert self.session is not None
-        write_json_atomic(
-            self.session.session_json,
+        with self._lock:
+            chunk_ids = sorted(c["chunk_id"] for c in self.chunks)
+            software = dict(self.software)
+        meta = self.builder.session(
             {
                 "session_id": self.session.session_id,
-                "app": {"name": "signal-archive-recorder", "version": __version__},
                 "started_ns": self._started_ns,
                 "ended_ns": ended_ns,
                 "end_reason": end_reason,
@@ -502,6 +539,8 @@ class SessionManager:
                     "channels": self.format.channels,
                     "sample_format": self.format.sample_format,
                 },
-                "chunks": sorted(c["chunk_id"] for c in self.chunks),
-            },
+                "software": software,
+                "chunks": chunk_ids,
+            }
         )
+        write_json_atomic(self.session.session_json, meta)

@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://signal-archive-project.org/schemas/recorder/mode-params/slotted/1",
+  "title": "mode.params for slotted modes (WSJT family, JS8)",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "period_s": { "type": "number", "exclusiveMinimum": 0, "description": "T/R period reported by the decoder" },
+    "freq_tolerance_hz": { "type": "integer", "minimum": 0 },
+    "sub_mode": { "type": "string" }
+  }
+}

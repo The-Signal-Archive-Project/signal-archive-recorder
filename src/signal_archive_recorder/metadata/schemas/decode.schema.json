@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://signal-archive-project.org/schemas/recorder/decode/1",
+  "title": "One line of <source>_decodes.jsonl",
+  "type": "object",
+  "required": ["received_ns", "source", "mode_id", "text", "decoder_time_ns", "snr_db", "dt_s", "df_hz", "low_confidence", "off_air"],
+  "additionalProperties": false,
+  "properties": {
+    "received_ns": { "type": "integer" },
+    "source": { "type": "string" },
+    "mode_id": { "type": "string" },
+    "text": { "type": "string" },
+    "redacted": { "const": true, "description": "The operator's own call or grid was removed" },
+    "decoder_time_ns": { "type": ["integer", "null"], "description": "null for off-air decodes" },
+    "snr_db": { "type": ["number", "null"] },
+    "dt_s": { "type": ["number", "null"] },
+    "df_hz": { "type": ["number", "null"] },
+    "low_confidence": { "type": ["boolean", "null"] },
+    "off_air": { "type": "boolean" },
+    "raw": { "type": "object", "description": "Source-specific fields (see the source's protocol doc)" }
+  }
+}

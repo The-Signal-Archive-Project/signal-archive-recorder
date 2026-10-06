@@ -11,15 +11,12 @@ from typing import Any
 import pytest
 import soundfile as sf
 
-from signal_archive_recorder.audio.capture import Capture
 from signal_archive_recorder.audio.flac_writer import array_to_raw, verify_flac
-from signal_archive_recorder.audio.format import AudioFormat
 from signal_archive_recorder.audio.timeline import StreamTimeline
 from signal_archive_recorder.core.bus import EventBus
 from signal_archive_recorder.core.clock import FakeClock
 from signal_archive_recorder.core.events import (
     Decode,
-    Event,
     FreqChanged,
     ModeChanged,
     SourceUp,
@@ -27,75 +24,11 @@ from signal_archive_recorder.core.events import (
     TxEnded,
     TxStarted,
 )
-from signal_archive_recorder.modes import ModeRegistry
 from signal_archive_recorder.session.manager import SessionManager
 from signal_archive_recorder.session.storage import SessionStorage
 from signal_archive_recorder.sources.base import SupervisedSource
-from tests.fakes.fake_audio import FakeAudioDevice, noise
-
-S = 10**9
-FMT = AudioFormat(8_000, 1, "int16")  # low rate keeps 12-minute sessions fast
-REGISTRY = ModeRegistry.load_default()
-
-
-def utc_ns(hhmmss: str, day: str = "2026-10-05") -> int:
-    return int(datetime.fromisoformat(f"{day}T{hhmmss}").replace(tzinfo=UTC).timestamp()) * S
-
-
-def frames(seconds: float) -> int:
-    return round(seconds * FMT.sample_rate)
-
-
-class Rig:
-    """Fake sound card + capture + bus + session manager, all on one fake clock."""
-
-    def __init__(self, root: Path, start: str = "12:03:07", seconds: float = 720, **kw: Any):
-        self.clock = FakeClock(utc_ns(start))
-        self.bus = EventBus(self.clock)
-        self.timeline = StreamTimeline(FMT.sample_rate)
-        self.manager = SessionManager(
-            storage=SessionStorage(root),
-            fmt=FMT,
-            registry=REGISTRY,
-            clock=self.clock,
-            bus=self.bus,
-            timeline=self.timeline,
-            **kw,
-        )
-        self.session = self.manager.start()
-        self.capture = Capture(
-            FMT,
-            bus=self.bus,
-            clock=self.clock,
-            sinks=[self.manager],
-            timeline=self.timeline,
-            buffer_seconds=seconds + 10,  # audio is pumped far faster than real time
-        )
-        self.capture.start()
-        self.data = noise(FMT, seconds, seed=1)
-        self.rate_hz = float(FMT.sample_rate)  # the sound card's true rate, for drift tests
-        self.device = FakeAudioDevice(FMT, self.data, self._callback, block_frames=(480, 97, 640))
-
-    def _callback(self, data: memoryview, n: int, overflow: bool) -> None:
-        self.clock.advance(round(n * S / self.rate_hz))  # real time passes as audio arrives
-        self.capture.on_audio(data, n, overflow)
-
-    def pump_to(self, seconds: float) -> None:
-        """Deliver audio up to `seconds` into the stream."""
-        delivered = self.capture.stats().delivered_frames
-        self.device.pump(frames(seconds) - delivered)
-
-    def publish(self, event: Event) -> None:
-        self.bus.publish(event)
-        assert self.bus.wait_idle()
-
-    def finish(self) -> list[dict[str, Any]]:
-        self.device.pump()
-        self.capture.stop(timeout=10)
-        self.bus.wait_idle()
-        chunks = self.manager.close()
-        self.bus.close()
-        return sorted(chunks, key=lambda c: c["index"])
+from tests.fakes.fake_audio import noise
+from tests.fakes.session_rig import FMT, REGISTRY, Rig, S, frames, utc_ns
 
 
 def stream_seconds(chunk: dict[str, Any], key: str = "start_frame") -> float:
@@ -103,14 +36,16 @@ def stream_seconds(chunk: dict[str, Any], key: str = "start_frame") -> float:
 
 
 def read_raw(folder: Path, chunk: dict[str, Any]) -> bytes:
-    data, _ = sf.read(folder / chunk["flac"]["file"], dtype="int16", always_2d=True)
+    data, _ = sf.read(folder / chunk["audio"]["flac"]["file"], dtype="int16", always_2d=True)
     return array_to_raw(data, FMT)
 
 
 def assert_all_verified(rig: Rig, chunks: list[dict[str, Any]]) -> None:
     for c in chunks:
-        assert c["flac"]["verified"], c["chunk_id"]
-        assert verify_flac(rig.session.path / c["flac"]["file"], FMT, c["flac"]["pcm_md5"]).ok
+        assert c["audio"]["flac"]["verified"], c["chunk_id"]
+        assert verify_flac(
+            rig.session.path / c["audio"]["flac"]["file"], FMT, c["audio"]["flac"]["pcm_md5"]
+        ).ok
     joined = b"".join(read_raw(rig.session.path, c) for c in chunks)
     assert joined == rig.data, "chunks don't concatenate to the original stream"
 
@@ -135,9 +70,12 @@ def test_first_chunk_aligned(tmp_path: Path) -> None:
         (frames(413), frames(713)),  # 12:10 -> 12:15
         (frames(713), frames(720)),  # session end at 12:15:07
     ]
-    assert [c["audio"]["end_reason"] for c in chunks] == ["policy"] * 3 + ["session_end"]
-    assert chunks[1]["audio"]["first_sample_ns"] == utc_ns("12:05:00")
-    assert chunks[0]["mode"]["value"] == "ft8" and chunks[0]["dial_hz"]["value"] == 14_074_000
+    assert [c["time"]["end_reason"] for c in chunks] == ["policy"] * 3 + ["session_end"]
+    assert chunks[1]["time"]["first_sample_ns"] == utc_ns("12:05:00")
+    assert (
+        chunks[0]["mode"]["mode_id"]["value"] == "ft8"
+        and chunks[0]["radio"]["dial_hz"]["value"] == 14_074_000
+    )
     assert_all_verified(rig, chunks)
 
 
@@ -147,7 +85,7 @@ def test_first_sample_utc_exact(tmp_path: Path) -> None:
     one_sample = S // FMT.sample_rate
     for c in chunks:
         expected = utc_ns("12:03:07") + c["audio"]["first_sample_frame"] * S // FMT.sample_rate
-        assert abs(c["audio"]["first_sample_ns"] - expected) <= one_sample
+        assert abs(c["time"]["first_sample_ns"] - expected) <= one_sample
         assert c["audio"]["sample_count"] == c["audio"]["end_frame"] - c["audio"]["start_frame"]
 
 
@@ -158,8 +96,8 @@ def test_split_on_freq_change(tmp_path: Path) -> None:
     rig.publish(FreqChanged(source="wsjtx", dial_hz=7_074_000))
     chunks = rig.finish()
     assert [stream_seconds(c) for c in chunks] == [0, 70, 113]
-    assert [c["audio"]["end_reason"] for c in chunks] == ["freq_change", "policy", "session_end"]
-    assert [c["dial_hz"]["value"] for c in chunks] == [14_074_000, 7_074_000, 7_074_000]
+    assert [c["time"]["end_reason"] for c in chunks] == ["freq_change", "policy", "session_end"]
+    assert [c["radio"]["dial_hz"]["value"] for c in chunks] == [14_074_000, 7_074_000, 7_074_000]
     assert_all_verified(rig, chunks)
 
 
@@ -170,8 +108,8 @@ def test_split_on_mode_change(tmp_path: Path) -> None:
     rig.publish(ModeChanged(source="wsjtx", mode_id="ft4", raw_mode="FT4"))
     chunks = rig.finish()
     assert [stream_seconds(c) for c in chunks] == [0, 42.5]
-    assert [c["mode"]["value"] for c in chunks] == ["ft8", "ft4"]
-    assert chunks[0]["audio"]["end_reason"] == "mode_change"
+    assert [c["mode"]["mode_id"]["value"] for c in chunks] == ["ft8", "ft4"]
+    assert chunks[0]["time"]["end_reason"] == "mode_change"
     assert_all_verified(rig, chunks)
 
 
@@ -189,14 +127,14 @@ def test_mode_change_changes_policy(tmp_path: Path) -> None:
     rig.pump_to(53)  # 12:04:00
     rig.publish(ModeChanged(source="wsjtx", mode_id="wspr", raw_mode="WSPR"))
     chunks = rig.finish()
-    starts = [datetime.fromtimestamp(c["audio"]["first_sample_ns"] / S, UTC) for c in chunks]
+    starts = [datetime.fromtimestamp(c["time"]["first_sample_ns"] / S, UTC) for c in chunks]
     assert [t.strftime("%H:%M:%S") for t in starts] == [
         "12:03:07",
         "12:04:00",
         "12:06:00",
         "12:12:00",
     ]
-    assert [c["mode"]["value"] for c in chunks] == ["ft8", "wspr", "wspr", "wspr"]
+    assert [c["mode"]["mode_id"]["value"] for c in chunks] == ["ft8", "wspr", "wspr", "wspr"]
     assert_all_verified(rig, chunks)
 
 
@@ -206,7 +144,7 @@ def test_reported_period_drives_policy(tmp_path: Path) -> None:
     rig.publish(ModeChanged(source="wsjtx", mode_id="q65", raw_mode="Q65", period_s=120.0))
     chunks = rig.finish()
     assert stream_seconds(chunks[1]) == 360  # Q65-120: 6-minute chunks
-    assert chunks[0]["mode"]["period_s"] == 120.0
+    assert chunks[0]["mode"]["params"]["period_s"] == 120.0
 
 
 def test_tx_intervals(tmp_path: Path) -> None:
@@ -258,13 +196,17 @@ def test_source_crash_isolated(tmp_path: Path) -> None:
 
     assert runs["n"] > 1  # the supervisor kept restarting it
     assert_all_verified(rig, chunks)  # audio is complete and verified regardless
-    assert chunks[1]["mode"]["value"] == "ft8"
+    assert chunks[1]["mode"]["mode_id"]["value"] == "ft8"
     down = chunks[1]["sources"]["flaky"]["down"]
     assert len(down) == 1 and down[0][0] == frames(200 - 113)
     assert down[0][2].startswith("crashed: RuntimeError")
     later = chunks[2]  # started at 12:10 while the source was down
-    assert later["mode"] == {"value": None, "reason": "source_unavailable", "source": "flaky"}
-    assert later["dial_hz"]["reason"] == "source_unavailable"
+    assert later["mode"]["mode_id"] == {
+        "value": None,
+        "reason": "source_unavailable",
+        "source": "flaky",
+    }
+    assert later["radio"]["dial_hz"]["reason"] == "source_unavailable"
     assert later["sources"]["flaky"]["up_at_start"] is False
 
 
@@ -288,7 +230,8 @@ def test_decode_counts_split_live_and_off_air(tmp_path: Path) -> None:
     for off_air in (False, False, True):
         rig.publish(Decode(source="wsjtx", mode_id="ft8", text="CQ TEST", off_air=off_air))
     [chunk] = rig.finish()
-    assert chunk["decodes"] == {"live": 2, "off_air": 1}
+    assert chunk["decodes"]["count"]["value"] == 2
+    assert chunk["decodes"]["off_air_count"] == 1
 
 
 def test_session_json_and_files(tmp_path: Path) -> None:
@@ -383,16 +326,17 @@ def test_captured_wsjtx_traffic_drives_chunks(tmp_path: Path) -> None:
     chunks = rig.finish()
 
     assert [stream_seconds(c) for c in chunks] == [0, 40, 80, 113]  # + 12:05:00 boundary
-    assert [c["audio"]["end_reason"] for c in chunks] == [
+    assert [c["time"]["end_reason"] for c in chunks] == [
         "freq_change",
         "freq_change+mode_change",  # WSJT-X sent FT4 and its frequency together
         "policy",
         "session_end",
     ]
-    dials = [c["dial_hz"]["value"] for c in chunks]
+    dials = [c["radio"]["dial_hz"]["value"] for c in chunks]
     assert dials == [14_074_000, 7_074_000, 7_047_500, 7_047_500]
-    assert [c["mode"]["value"] for c in chunks] == ["ft8", "ft8", "ft4", "ft4"]
-    assert chunks[2]["decodes"] == {"live": 0, "off_air": 5}
+    assert [c["mode"]["mode_id"]["value"] for c in chunks] == ["ft8", "ft8", "ft4", "ft4"]
+    assert chunks[2]["decodes"]["count"]["value"] == 0
+    assert chunks[2]["decodes"]["off_air_count"] == 5
     assert chunks[2]["tx_intervals"] == [[frames(10), frames(15)]]
     assert len(decode_log.read_text().splitlines()) == 5
     assert_all_verified(rig, chunks)

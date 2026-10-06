@@ -21,6 +21,7 @@ classifiers = [
 # Runtime dependencies are added stage by stage; see CLAUDE.md.
 dependencies = [
     "jsonschema>=4.18",
+    "referencing>=0.28",
     "numpy>=1.26",
     "sounddevice>=0.4.7",
     "soundfile>=0.13",

@@ -50,7 +50,8 @@ v0.1 targets **FT8 through WSJT-X**, but we'll add more modes quickly: FT4, WSPR
 - **Bit-exact audio.** No resampling, gain, dither, or bit-depth or channel conversion. Record the format the device *actually* delivered, and warn if the OS is resampling.
 - **Audio wins.** A crashing or silent metadata source must never stop or corrupt capture. Each source runs isolated (its own thread or task, exceptions caught and logged), and its failure becomes a `SourceDown` event and a gap in the metadata.
 - **Unknown is `null` with a reason, never a default.** Reasons form a closed enum: `source_unavailable`, `not_reported`, `not_applicable`, `user_withheld`. A wrong default is worse than a blank.
-- **Privacy filtering happens before upload.** Strip anything not in the schema. No hostnames, file paths, OS usernames or device serials in uploaded files. Grid precision defaults to 4 characters, and 6 only with opt-in for satellite work.
+- **Privacy filtering happens before upload.** Strip anything not in the schema. No hostnames, file paths, OS usernames or device serials in uploaded files.
+- **Callsign and grid are the operator's choice.** Sharing the callsign is opt-in (it's public, and helps attribution). Grid precision is withheld, 4, 6 or 8 characters, defaulting to 4. When the callsign isn't shared, it's replaced with `<OWN_CALL>` in decoded messages too, and a withheld grid becomes `<OWN_GRID>` in messages containing the operator's call. Other stations' messages are never changed.
 - **Nothing is uploaded without stored consent.** Keep local files until the PR is confirmed created.
 - **Tokens live only in the OS keyring,** never in config files, logs or exception messages.
 
@@ -227,19 +228,25 @@ Exit tests (fake clock advancing with a fake sound card; 8 kHz mono keeps 12-min
 ### Stage 6: Metadata generation, schemas and privacy
 
 Build:
-- `session.schema.json` and `chunk.schema.json` (JSON Schema 2020-12, versioned) plus per-mode `mode_params` sub-schemas
-- `builder.py`, which assembles metadata from the chunk's event window
-- `privacy.py`, which allow-lists fields (not deny-lists), truncates grids and scrubs strings
+- `metadata/schemas/{common,chunk,session,decode}.schema.json` (JSON Schema 2020-12, ids `…/recorder/<name>/1`), with every object closed (`additionalProperties: false`). Unknown values use `common#/$defs/known`: `{"value", "reason", "source"?}`, where a null value requires a reason (`source_unavailable`, `not_reported`, `not_applicable` or `user_withheld`).
+- `modes/schemas/slotted_params.schema.json`, used by every slotted mode's `params_schema` (period, frequency tolerance, sub-mode). Async modes have no params. The registry rejects a mode whose params schema file is missing.
+- `metadata/builder.py` `MetadataBuilder`: copies named fields from the manager's internal record into the public schema, and never copies whole objects. Unlisted settings, event fields, mode params and decode `raw` keys are dropped and logged (`builder.dropped`). Every file is validated before it's written. A validation failure is a bug: the record is written locally as `.meta.invalid.json` and never published.
+  - Band comes from `metadata/bands.json` (`not_applicable` outside the amateur bands).
+  - Decode stats count only live decodes: median DT and count, `not_applicable` for async modes and `not_reported` when there are none.
+  - Crash reasons are reduced to the exception type.
+  - Decode logs are rewritten through the filter when the session closes, so sources must be stopped first.
+- `metadata/privacy.py`: `Scrubber` (hostname, user, home and absolute paths, device names) for the few free-text fields, and `DecodeRedactor` for the operator's own call and grid.
+- `metadata/settings.py` `StationSettings`: callsign plus `share_callsign`, grid plus `grid_precision`, HF username, station profile and consent.
+- Values no source ever reported are `source_unavailable`. `not_reported` means the source is up but didn't say.
 
 Exit tests:
-- `test_session_and_chunk_validate`: generated files validate for every mode in the registry (contract-parametrised).
-- `test_unknown_is_null_with_reason`: with no rig source, `rig_mode`, filter, AGC and NB/NR are `null` with reason `source_unavailable`, never `0`, `""` or a guessed value. With no decoder source, `mode_id` is `null` the same way.
-- `test_median_dt`: the chunk's median DT and decode count are right for a fixture decode set, and are `null`/`not_applicable` for async modes.
-- `test_events_list`: every freq, mode or setting change inside the chunk appears with its timestamp.
-- `test_privacy_no_leaks`: the uploaded files have none of `socket.gethostname()`, `getpass.getuser()`, the home directory path, device serials or the token, checked with a recursive string scan of every output file including decodes.
-- `test_grid_precision`: a 6-character station grid is stored as 4 characters by default, and as 6 only when satellite opt-in is set.
-- `test_extra_fields_stripped`: fields an adapter puts in metadata that aren't in the schema are removed, and the removal is logged locally.
-- `test_unmapped_mode_flagged`: an unknown raw mode string is stored raw with `needs_mapping: true` and still validates.
+- `test_session_and_chunk_validate` (contract test, every registered mode).
+- `test_unknown_is_null_with_reason`: no sources means every radio, mode, decode and path value is null with `source_unavailable`. `test_values_present_when_reported` checks the opposite.
+- `test_median_dt`, `test_median_dt_not_applicable_for_async` and `test_no_decodes_is_not_reported`.
+- `test_events_list`.
+- `test_privacy_no_leaks`: adapters inject the hostname, home paths, a device serial and the own call and grid. A scan of every file in the session folder finds none of them. (Checked by disabling the scrubber, which makes the test fail.)
+- `test_grid_precision` (withheld, 4, 6 or 8; never more than is known), `test_callsign_shared_when_chosen` and `test_redaction_rules`.
+- `test_extra_fields_stripped`, `test_unmapped_mode_flagged`, `test_invalid_metadata_never_published`, `test_consent_recorded`, `test_band_lookup` and `test_settings_validation`.
 
 ### Stage 7: Headless CLI, end-to-end (finishes v0.1)
 
@@ -317,14 +324,14 @@ Exit tests:
 Build:
 - Gpredict and SatPC32 readers (satellite name, NORAD ID, Doppler correction mode)
 - TLE capture with its epoch (software cache first, then CelesTrak)
-- 6-character grid opt-in with an explanation
+- When satellite work is detected, explain that a grid of 6 or more characters improves Doppler analysis (the precision stays the operator's choice)
 
 Exit tests:
 - `test_gpredict_fixture_parse`.
 - `test_tle_epoch_stored` (fetch fake).
 - `test_doppler_mode_enum`: one of `downlink`, `uplink`, `both`, `none`, or `null`/`source_unavailable`.
 - `test_sat_path_type`: satellite chunks have `path_type: "satellite"` and the satellite block validates.
-- `test_six_char_grid_only_with_optin`.
+- `test_satellite_grid_hint`: a satellite session with grid precision below 6 shows the hint once and records the precision unchanged.
 
 ### Stage 12: Packaging and launch (v1.0)
 

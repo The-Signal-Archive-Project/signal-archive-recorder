@@ -46,6 +46,8 @@ class ModeChanged(Event):
     raw_mode: str
     needs_mapping: bool = False
     period_s: float | None = None
+    # Mode-specific values, checked against the mode's params_schema from modes.json.
+    params: Mapping[str, Any] = field(default_factory=lambda: _EMPTY)
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -9,7 +9,7 @@
       "nominal_bw_hz": 50,
       "sideband": "usb",
       "aliases": { "wsjtx": ["FT8", "~"], "jtdx": ["FT8"] },
-      "params_schema": null
+      "params_schema": "slotted_params.schema.json"
     },
     {
       "id": "ft4",
@@ -19,7 +19,7 @@
       "nominal_bw_hz": 90,
       "sideband": "usb",
       "aliases": { "wsjtx": ["FT4", "+"], "jtdx": ["FT4"] },
-      "params_schema": null
+      "params_schema": "slotted_params.schema.json"
     },
     {
       "id": "wspr",
@@ -29,7 +29,7 @@
       "nominal_bw_hz": 6,
       "sideband": "usb",
       "aliases": { "wsjtx": ["WSPR"] },
-      "params_schema": null
+      "params_schema": "slotted_params.schema.json"
     },
     {
       "id": "jt65",
@@ -39,7 +39,7 @@
       "nominal_bw_hz": 178,
       "sideband": "usb",
       "aliases": { "wsjtx": ["JT65"], "jtdx": ["JT65"] },
-      "params_schema": null,
+      "params_schema": "slotted_params.schema.json",
       "notes": "Bandwidth is for submode A; B and C are wider."
     },
     {
@@ -50,7 +50,7 @@
       "nominal_bw_hz": null,
       "sideband": "usb",
       "aliases": { "wsjtx": ["Q65"] },
-      "params_schema": null,
+      "params_schema": "slotted_params.schema.json",
       "notes": "T/R period and tone spacing vary by submode; the source reports the period in use."
     },
     {
@@ -61,7 +61,7 @@
       "nominal_bw_hz": 2400,
       "sideband": "usb",
       "aliases": { "wsjtx": ["MSK144"] },
-      "params_schema": null
+      "params_schema": "slotted_params.schema.json"
     },
     {
       "id": "js8",
@@ -71,7 +71,7 @@
       "nominal_bw_hz": 50,
       "sideband": "usb",
       "aliases": { "js8call": ["JS8"] },
-      "params_schema": null,
+      "params_schema": "slotted_params.schema.json",
       "notes": "Normal speed is 15 s; slow, fast and turbo use 30, 10 and 6 s with different bandwidths."
     },
     {
