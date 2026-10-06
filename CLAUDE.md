@@ -408,23 +408,17 @@ Split into three PRs: **9a**, recording robustness (done below); **9b**, resumab
 - **Disk limits** (`session/cleanup.py`, `[storage] max_gb` and `delete_after_days`, both off by default): only **confirmed** sessions (state `validated`) are ever deleted, oldest first. If that isn't enough, a `disk_limit` warning is raised. The service applies the limits each round, and `cleanup [--dry-run]` applies them on demand.
 - Tests: `tests/unit/test_stage9b.py` (`test_retry_backoff_and_resume`, `test_bandwidth_cap`, `test_disk_limit` and others).
 
-**Remaining for 9c:**
+**9c (done):**
+- **PySide6 is optional:** the `gui` extra (`PySide6-Essentials`, used under LGPL-3.0, listed in `NOTICE`). Headless installs never import Qt; `tray` without it prints how to install it. `tools/check_licenses.py` parses SPDX expressions (`OR` needs one acceptable option, `AND` needs all), because Qt for Python is "LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only".
+- **Thin UI, logic outside Qt:**
+  - `ui/health.py`: pure functions `checklist(HealthInputs)` and `tray_state` (grey if paused; red if anything is `bad`, i.e. not recording or disk critical; yellow if anything is `warn`; otherwise green).
+  - `ui/controller.py` `RecorderController` (no Qt): runs the `Recorder`, follows bus events for WSJT-X, clock and disk, and `snapshot()` adds the live level (`audio/levels.py` `LiveLevel` sink), lost samples and upload counts. Pause stops the session (`end_reason: "paused"`), and resume starts a new one, so every session is one unbroken recording.
+  - `ui/app.py`: `StatusWindow` (checklist, level meter, notes, Pause/Resume, Upload now, open recordings or settings), `Tray` (colour dot, menu) and `run()`. It shows `snapshot()` once a second and decides nothing itself.
+- **"Mark this" notes:** `core/events.py` `Note` (source `operator`, at most 200 characters), stored as a chunk event with `detail`, and scrubbed like every free-text field.
+- **CLI:** `signal-archive-recorder tray`.
+- **Tests:** `tests/unit/test_stage9c.py` (`test_tray_state_mapping`, `test_mark_note_event`, pause/resume, and a `pytest-qt` window smoke test). Qt tests run with `QT_QPA_PLATFORM=offscreen` (set in `tests/conftest.py`), and CI installs Qt's system libraries on Linux.
 
-Build:
-- Optional GPS/GPSDO as a time source (the NTP clock monitor moved forward into v0.1, Stage 7b)
-- Multicast setup help
-- Resume and retry with backoff
-- Bandwidth cap, "upload now" and "upload overnight"
-- Disk limit and auto-delete of confirmed uploads after N days
-- PySide6 tray and status window: checklist, level meter, "mark this" notes, pause/resume
-
-Exit tests:
-- `test_retry_backoff_and_resume`: an interrupted upload resumes without re-sending finished files, and the backoff delays are bounded.
-- `test_bandwidth_cap`: measured throughput against the fake stays ≤ the cap (±10%).
-- `test_disk_limit`: hitting the limit deletes only confirmed-uploaded sessions (oldest first). Unconfirmed sessions are never deleted. If nothing can be deleted, a warning is raised.
-- `test_mark_note_event`: a "mark this" note lands in the right chunk's events with its timestamp.
-- `test_tray_state_mapping`: health inputs map to green, yellow, red or grey (pure function, no Qt needed).
-- UI smoke test with `pytest-qt`: the window opens, the status updates from a fake manager, and pause/resume works.
+**Moved later:** an optional GPS/GPSDO time source (alongside the NTP monitor of Stage 7b).
 
 ### Stage 10: More modes and sources (v0.4)
 
@@ -472,6 +466,13 @@ Exit tests:
 SoapySDR input writing conforming SigMF with a clip-length cap. Treat it as another capture backend behind the same `capture` interface. Tests: SigMF output passes `sigmf` validation, the cap is enforced, and the metadata carries the same core fields.
 
 ---
+
+## Release notes
+
+GitHub release notes are for the people who might use the app, not for developers:
+- Lead with **why**: contributing real receive audio builds an open signal archive for research and development (better decoders and detectors, propagation and interference studies).
+- Then a short, high-level overview of what the release lets an operator do, and how to get started (install command, `signal-archive-recorder`).
+- No internals (schemas, state machines, file formats, test names). Those belong in `CHANGELOG.md`; link to it.
 
 ## Adding a new mode (checklist)
 

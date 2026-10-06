@@ -11,6 +11,15 @@ All notable changes to Signal Archive Recorder. Versions follow [semantic versio
 - **Background uploading** while recording, using `[upload] schedule = "while_recording"` or `"overnight"` (within `overnight_window`).
 - **Disk limits:** `[storage] max_gb`, `delete_after_days` and `cleanup [--dry-run]`. Only sessions whose upload has been confirmed (validated or merged) are ever deleted.
 
+### Status window and tray
+- **`signal-archive-recorder tray`:** records with a status window and a tray icon (green, yellow, red or grey), a checklist (recording, audio, WSJT-X, clock, disk, uploads) and a live audio level meter. Needs the optional `gui` extra (`pip install "signal-archive-recorder[gui]"`).
+- **"Mark this" notes:** a note typed or picked in the window is saved as a `Note` event at that moment of the recording, in the chunk's metadata.
+- **Pause and resume:** pausing ends the session cleanly (`end_reason: "paused"`); resuming starts a new one.
+- **Upload now** from the window.
+
+### Project
+- The dependency license check understands SPDX expressions, so a dependency offered under a choice of licenses (such as Qt for Python's LGPL-3.0 or GPL) passes when one acceptable option exists.
+
 ## [0.1.0] - 2026-10-06
 
 The first release. It records bit-exact receive audio from a ham station, labels it with context from WSJT-X, and contributes it to the Signal Archive Project's open dataset on Hugging Face. FT8 and FT4 are fully supported, and the mode registry already covers WSPR, JT65, Q65, MSK144, JS8, PSK31, RTTY and CW for upcoming decoder integrations.

@@ -85,6 +85,20 @@ Uploads resume where they left off if the connection drops.
 
 Before anything is sent, the recorder checks that each chunk really is your radio's receive audio: a decoder such as WSJT-X was running, and the signals it decoded are actually present in the recording. Chunks that fail (for example, the wrong audio input was picked) stay on your computer, in the session's `local/excluded/` folder, with the reason.
 
+### Status window and tray icon
+
+```bash
+pipx install --force "signal-archive-recorder[gui] @ git+https://github.com/The-Signal-Archive-Project/signal-archive-recorder"
+signal-archive-recorder tray
+```
+
+`tray` records just like `record`, with a small window and a tray icon whose colour says how things are going: **green** recording and all good, **yellow** recording but something needs a look (no WSJT-X, clipping, clock off, uploads stuck), **red** not recording, **grey** paused. The window shows a checklist and an audio level meter, and lets you:
+- **Mark this:** add a note ("strong QRM", "rare DX") at this moment of the recording; it's saved with the chunk.
+- **Pause / Resume:** pausing ends the session cleanly; resuming starts a new one.
+- **Upload now**, and open the recordings folder or the settings file.
+
+Closing the window keeps recording in the tray; **Quit** in the tray menu stops and saves. The window needs the optional `gui` extra (Qt for Python, about 230 MB); everything else works without it.
+
 ### No radio?
 
 Set `[audio] file = "something.wav"` to play a 16- or 24-bit WAV as if it were a sound card. With a clone of this repository, `python tools/fake_wsjtx_emitter.py` stands in for WSJT-X.
