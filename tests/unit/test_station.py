@@ -55,7 +55,7 @@ def status(dial: int, mode: str = "FT8") -> m.Status:
 class Rig:
     """A station with a fake sound card on a fake clock, and WSJT-X over real UDP."""
 
-    def __init__(self, tmp_path: Path, start: str = "with_decoder") -> None:
+    def __init__(self, tmp_path: Path, start: str = "with_decoder", settle_s: float = 0.3) -> None:
         self.clock = FakeClock(utc_ns("12:03:07"))
         self.backend = FakeBackend(
             [DEVICE], noise(FMT, 900), on_block=lambda n: self.clock.advance(n * S // 8000)
@@ -71,7 +71,11 @@ class Rig:
         self.root = tmp_path
         config = replace(make_config(tmp_path, buffer_seconds=60), start=start)
         self.station = Station(
-            config, clock=self.clock, ntp_probe=fake_ntp, recorder_kwargs={"backend": self.backend}
+            config,
+            clock=self.clock,
+            ntp_probe=fake_ntp,
+            recorder_kwargs={"backend": self.backend},
+            settle_s=settle_s,
         )
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
@@ -270,3 +274,24 @@ def test_ready_states(changes: dict[str, Any], state: str, detail: str | None) -
     assert tray_state(health) == state
     if detail:
         assert checklist(health)[0].detail.startswith(detail)
+
+
+def test_waits_for_wsjtx_to_settle_before_recording(tmp_path: Path) -> None:
+    """What WSJT-X 3.0.2 really sent while loading its settings (Rig None, FT4)."""
+    rig = Rig(tmp_path, settle_s=1.0)
+    rig.station.start()
+    try:
+        rig.send(m.Heartbeat("WSJT-X", 3, "3.0.2", ""))
+        for dial in (0, 7_047_500, 145_000_000, 7_047_500):
+            rig.send(status(dial, "FT4"))
+            time.sleep(0.1)
+        time.sleep(0.5)
+        assert rig.station.state == "standby"  # still settling
+        rig.wait(lambda: rig.station.state == "recording", "recording once settled")
+        rig.pump(10)
+    finally:
+        rig.station.stop()
+    [session] = rig.sessions()
+    [chunk] = rig.chunks(session["session_id"])  # one chunk, not four slivers
+    assert chunk["radio"]["dial_hz"]["value"] == 7_047_500
+    assert chunk["mode"]["mode_id"]["value"] == "ft4"

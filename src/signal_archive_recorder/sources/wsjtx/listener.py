@@ -246,7 +246,7 @@ class WsjtxListener:
 
     def _on_status(self, s: m.Status) -> None:
         state = self._client(s.client_id)
-        if s.dial_hz != state.dial_hz:
+        if s.dial_hz and s.dial_hz != state.dial_hz:  # 0 Hz: WSJT-X hasn't a frequency yet
             state.dial_hz = s.dial_hz
             state.last_freq = self._publish(FreqChanged, s.client_id, dial_hz=s.dial_hz)
         if (s.mode, s.tr_period_s) != (state.mode, state.tr_period_s):

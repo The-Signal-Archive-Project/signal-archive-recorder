@@ -20,6 +20,7 @@ All notable changes to Signal Archive Recorder. Versions follow [semantic versio
 ### Recording
 - **Records only while WSJT-X is running.** Otherwise the recorder waits, ready, with the sound card closed. A session starts when WSJT-X appears and is saved when it closes or goes quiet for 30 s (`end_reason: "decoder_closed"`). Background uploads carry on in between. `[recording] start = "always"` records from start to stop as before (needed for WAV-file playback).
 - If the sound card can't be opened (unplugged, say), the recorder says why and tries again every 30 s.
+- A session starts once WSJT-X's frequency and mode have been steady for 2 s, so WSJT-X's own start-up (which briefly reports several frequencies, including 0 Hz) no longer leaves tiny chunks. A 0 Hz dial is ignored.
 
 ### Desktop app
 - The tray icon is **blue** while ready and waiting for WSJT-X. Pause now also holds off recording until resumed.

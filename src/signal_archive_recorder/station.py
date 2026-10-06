@@ -28,7 +28,14 @@ from signal_archive_recorder.clockmon.monitor import NtpProbe, ntplib_probe
 from signal_archive_recorder.config import RecorderConfig
 from signal_archive_recorder.core.bus import EventBus, Subscriber
 from signal_archive_recorder.core.clock import Clock, SystemClock
-from signal_archive_recorder.core.events import CaptureWarning, SourceDown, SourceUp, Stamped
+from signal_archive_recorder.core.events import (
+    CaptureWarning,
+    FreqChanged,
+    ModeChanged,
+    SourceDown,
+    SourceUp,
+    Stamped,
+)
 from signal_archive_recorder.modes import ModeRegistry
 from signal_archive_recorder.recorder import (
     Recorder,
@@ -46,6 +53,10 @@ log = logging.getLogger(__name__)
 State = Literal["stopped", "standby", "recording", "paused"]
 DECODERS = ("wsjtx",)  # sources whose presence means "the station is on the air"
 RETRY_S = 30.0  # after a failed session start (sound card unplugged...), try again
+# WSJT-X flaps while it loads its settings (seen: dial 0 -> 7.0475 -> 145 -> 7.0475 MHz
+# within 0.3 s), which would split the start into tiny chunks. A session starts once
+# frequency and mode have been steady this long.
+SETTLE_S = 2.0
 
 
 class Station:
@@ -60,6 +71,7 @@ class Station:
         ntp_probe: NtpProbe = ntplib_probe,
         uploader_factory: Callable[[], Uploader] | None = None,
         on_session: Callable[[SessionDir | None, RunSummary | None], None] | None = None,
+        settle_s: float = SETTLE_S,
     ) -> None:
         """`on_session(started, None)` when a session starts, `(None, summary)` when one ends
         (called on the station's thread)."""
@@ -84,6 +96,8 @@ class Station:
         self._transition = threading.RLock()  # one session start/stop at a time
         self._thread: threading.Thread | None = None
         self._next_try_mono_ns = 0
+        self._settle_s = settle_s
+        self._changes = 0  # decoder state changes seen, for settling before a session
 
     # -- state ----------------------------------------------------------------------
 
@@ -211,15 +225,37 @@ class Station:
 
     def _on_event(self, stamped: Stamped) -> None:
         e = stamped.event
-        if e.source not in DECODERS or not isinstance(e, (SourceUp, SourceDown)):
+        if e.source not in DECODERS:
+            return
+        if isinstance(e, (FreqChanged, ModeChanged)):
+            with self._wake:
+                self._changes += 1
+                self._wake.notify_all()
+            return
+        if not isinstance(e, (SourceUp, SourceDown)):
             return
         key = (e.source, str(e.raw.get("client_id", "")))
         with self._wake:
             if isinstance(e, SourceUp):
                 self._decoders_up.add(key)
+                self._changes += 1
             else:
                 self._decoders_up.discard(key)
             self._wake.notify_all()
+
+    def _settled(self) -> bool:
+        """Wait until the decoder has reported no change for the settle time; False if
+        recording stopped being wanted meanwhile. Call with `_wake` held."""
+        while True:
+            seen = self._changes
+            changed = self._wake.wait_for(
+                lambda seen=seen: self._changes != seen or not self._wanted(),  # type: ignore[misc]
+                timeout=self._settle_s,
+            )
+            if not self._wanted():
+                return False
+            if not changed:
+                return True
 
     def _run(self) -> None:
         while True:
@@ -230,6 +266,8 @@ class Station:
                 if not self._running:
                     return
                 wanted = self._wanted()
+                if wanted and self.recorder is None and not self.always and self._settle_s > 0:
+                    wanted = self._settled()
             try:
                 if wanted and self.recorder is None:
                     if self.clock.monotonic_ns() >= self._next_try_mono_ns:

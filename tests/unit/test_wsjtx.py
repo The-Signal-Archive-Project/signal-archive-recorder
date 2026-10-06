@@ -352,3 +352,27 @@ def test_listener_thread_stops_promptly() -> None:
     h.bus.close()
     assert time.monotonic() - started < 2
     assert not any(t.name == "wsjtx-udp" for t in threading.enumerate())
+
+
+def test_zero_dial_is_not_a_frequency() -> None:
+    """WSJT-X reports 0 Hz for a moment while it starts; that's no frequency at all."""
+    h = Harness()
+    base = next(p for p in (m.parse(d) for d in capture()) if isinstance(p, m.Status))
+    statuses = [m.Status(**{**base.__dict__, "dial_hz": hz}) for hz in (0, 7_047_500)]
+    events = h.feed([m.encode(s) for s in statuses])
+    freqs = [e.dial_hz for e in events if isinstance(e, FreqChanged)]
+    assert freqs == [7_047_500]
+
+
+def test_announce_replays_the_current_state() -> None:
+    h = Harness()
+    for d in capture()[:20]:
+        h.listener.handle(d)
+    assert h.bus.wait_idle()
+    before = len(h.events)
+    h.listener.announce()
+    assert h.bus.wait_idle()
+    replayed = [type(e).__name__ for e in h.events[before:]]
+    assert replayed[0] == "SourceUp" and {"FreqChanged", "ModeChanged"} <= set(replayed)
+    assert h.listener.up_clients() == ["WSJT-X"]
+    h.bus.close()
