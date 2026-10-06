@@ -141,15 +141,28 @@ def format_review(r: Review) -> str:
     return "\n".join(lines)
 
 
-def remove_chunk(session_dir: Path, chunk_id: str, builder: MetadataBuilder) -> None:
-    """Move a chunk, and the labels from its time window, out of the upload."""
+def remove_chunk(
+    session_dir: Path,
+    chunk_id: str,
+    builder: MetadataBuilder,
+    *,
+    into: str = "removed",
+    why: list[str] | None = None,
+) -> None:
+    """Move a chunk, and the labels from its time window, out of the upload.
+
+    It goes to local/<into>/ (removed by the operator, or excluded by screening),
+    which is never uploaded, with a note of why when there's a reason.
+    """
     recordings = session_dir / "recordings"
     meta_path = recordings / f"{chunk_id}.meta.json"
     if not meta_path.exists():
         raise ReviewError(f"No chunk {chunk_id} in this session")
     meta = _load(meta_path)
-    removed = session_dir / "local" / "removed"
+    removed = session_dir / "local" / into
     removed.mkdir(parents=True, exist_ok=True)
+    if why:
+        (removed / f"{chunk_id}.why.txt").write_text("\n".join(why) + "\n", "utf-8")
     for path in recordings.glob(f"{chunk_id}.*"):
         os.replace(path, removed / path.name)
 

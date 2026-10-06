@@ -52,6 +52,14 @@ class Timing:
 
 
 @dataclass(frozen=True)
+class SignalTiming:
+    """Where a transmission sits in its slot (nominal)."""
+
+    start_s: float
+    duration_s: float
+
+
+@dataclass(frozen=True)
 class Mode:
     id: str
     display_name: str
@@ -62,6 +70,7 @@ class Mode:
     aliases: Mapping[str, tuple[str, ...]]
     params_schema: str | None
     notes: str = ""
+    signal: SignalTiming | None = None
 
 
 class Resolution(Enum):
@@ -130,6 +139,13 @@ class ModeRegistry:
                 aliases=MappingProxyType({s: tuple(a) for s, a in entry["aliases"].items()}),
                 params_schema=entry["params_schema"],
                 notes=entry.get("notes", ""),
+                signal=(
+                    SignalTiming(
+                        float(entry["signal"]["start_s"]), float(entry["signal"]["duration_s"])
+                    )
+                    if "signal" in entry
+                    else None
+                ),
             )
             if mode.id in self._modes:
                 raise RegistryError(f"duplicate mode id {mode.id!r}")

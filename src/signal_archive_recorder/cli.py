@@ -58,6 +58,7 @@ from signal_archive_recorder.upload.consent import CONSENT_TEXT, ConsentStore, N
 from signal_archive_recorder.upload.hub import DEFAULT_REPO, HfHub, Hub, HubError, check_token
 from signal_archive_recorder.upload.queue import NotLoggedInError, Uploader, UploadState
 from signal_archive_recorder.upload.review import ReviewError, format_review, review
+from signal_archive_recorder.upload.screening import screen_session
 from signal_archive_recorder.upload.token import KeyringUnavailableError, Token, TokenStore
 
 log = logging.getLogger("signal_archive_recorder")
@@ -96,8 +97,15 @@ def _config(path: Path | None) -> RecorderConfig:
 
 
 def _uploader(config: RecorderConfig) -> Uploader:
-    return Uploader(SessionStorage(config.storage_root), _hub(), _tokens(), _consent(), _clock(),
-                    repo_id=config.upload.repo)  # fmt: skip
+    return Uploader(
+        SessionStorage(config.storage_root),
+        _hub(),
+        _tokens(),
+        _consent(),
+        _clock(),
+        repo_id=config.upload.repo,
+        require_decoder=config.upload.require_decoder,
+    )
 
 
 def _session_dir(config: RecorderConfig, session_id: str) -> Path:
@@ -317,8 +325,18 @@ def cmd_review(args: argparse.Namespace) -> int:
                    if r.state in (UploadState.QUEUED, UploadState.BLOCKED)]  # fmt: skip
     if not targets:
         print("Nothing waiting to upload.")
+    registry = ModeRegistry.load_default()
     for session_dir in targets:
         print(format_review(review(session_dir)))
+        print("  Radio-audio checks:")
+        for s in screen_session(
+            session_dir, registry, require_decoder=config.upload.require_decoder
+        ):
+            mark = "ok      " if s.eligible else "KEEP BACK"
+            evidence = f"{s.decodes_visible}/{s.decodes_checked} decodes found in the audio"
+            print(f"    {mark} {s.chunk_id}  ({evidence})")
+            for note in s.reasons + s.warnings:
+                print(f"             - {note}")
         print()
     return 0
 
@@ -358,6 +376,8 @@ def cmd_upload(args: argparse.Namespace) -> int:
         print("Nothing to upload.")
     trouble = False
     for session_dir, record in results:
+        for kept in record.excluded:
+            print(f"{session_dir.name}: kept back {kept['chunk_id']}: {'; '.join(kept['reasons'])}")
         if record.state is UploadState.PR_OPENED:
             print(f"{session_dir.name}: pull request opened: {record.pr_url}")
         elif record.state is UploadState.BLOCKED:
@@ -391,6 +411,11 @@ def _dry_run(config: RecorderConfig, uploader: Uploader, sessions: list[str]) ->
             print(f"  {len(plan.files)} files, {total / 1e6:.1f} MB, into {plan.path_in_repo}/")
             for name, size in plan.files:
                 print(f"    {name}  ({size:,} bytes)")
+            for chunk_id, reasons in plan.excluded:
+                print(f"  {chunk_id} would be KEPT BACK (stays on this computer):")
+                print("".join(f"    - {r}\n" for r in reasons), end="")
+            for chunk_id, notes in plan.warnings:
+                print(f"  {chunk_id}: " + "; ".join(notes))
             if plan.problems:
                 trouble = True
                 print("  but it would be blocked:")

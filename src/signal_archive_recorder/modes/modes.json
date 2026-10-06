@@ -9,6 +9,7 @@
       "nominal_bw_hz": 50,
       "sideband": "usb",
       "aliases": { "wsjtx": ["FT8", "~"], "jtdx": ["FT8"] },
+      "signal": { "start_s": 0.5, "duration_s": 12.64 },
       "params_schema": "slotted_params.schema.json"
     },
     {
@@ -19,6 +20,7 @@
       "nominal_bw_hz": 90,
       "sideband": "usb",
       "aliases": { "wsjtx": ["FT4", "+"], "jtdx": ["FT4"] },
+      "signal": { "start_s": 0.5, "duration_s": 5.04 },
       "params_schema": "slotted_params.schema.json"
     },
     {
