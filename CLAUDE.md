@@ -4,18 +4,18 @@ Signal Archive Recorder is the station-side app of the **Signal Archive Project*
 
 - **Spec (source of truth):** "Signal Archive Recorder: Developer Reference" at https://claude.ai/artifact/3rtXJiU8buDYtBUx4J6izq. If this file and the spec disagree, follow the spec and update this file. Use "Signal Archive Recorder" for the app and "Signal Archive" for the wider project in all code, docs and UI text.
 - **Repo:** https://github.com/The-Signal-Archive-Project/signal-archive-recorder (org: The-Signal-Archive-Project). Work on branches and open PRs into the default branch; never push to it directly. Every commit needs a DCO `Signed-off-by` line (`git commit -s`; see CONTRIBUTING.md). The sign-off is the human contributor certifying the change, so only commit after they have asked for it.
-- **License: Apache-2.0.** See "Licensing" below before adding any dependency or protocol code.
+- **License: MPL-2.0** (the software; contributed recordings are CC BY 4.0). See "Licensing" below before adding any dependency or protocol code.
 
-## Licensing (Apache-2.0)
+## Licensing (MPL-2.0)
 
-Everything in this repo is Apache-2.0, so no GPL code may enter it. WSJT-X, JTDX, JS8Call, fldigi, Gpredict and Hamlib are all GPL or LGPL programs. We interoperate with them **only over their network interfaces** (UDP, TCP, XML-RPC) as a separate process, and we never copy, port, link or vendor their code.
+The software is licensed under the **Mozilla Public License 2.0**, chosen so that companies can use the recorder inside closed-source products while changes they distribute to its files come back as open source (file-level copyleft). It was relicensed from Apache-2.0 while the project owner was the only contributor. To keep closed-source embedding possible, no GPL code may enter it. WSJT-X, JTDX, JS8Call, fldigi, Gpredict and Hamlib are all GPL or LGPL programs. We interoperate with them **only over their network interfaces** (UDP, TCP, XML-RPC) as a separate process, and we never copy, port, link or vendor their code.
 
 - **Don't read or copy their source code.** Don't port code, comments, field tables, or enum and constant definitions out of their source files. Don't paste their headers or code into prompts, docs or tests.
 - **Implement protocols from our own docs.** Each protocol we read is documented in `docs/protocols/<source>.md`, written by us in our own words, from the program's user-facing docs and from datagrams we capture on our own station. Implement only from that doc. Note the evidence for each field there (which capture, which program version).
 - **Fixtures are our own captures.** UDP fixtures are datagrams recorded from our own station with `tools/capture_udp.py`, plus synthetic packets we build. They are data a program emitted, not code from it.
 - **Write fakes independently.** `fake_wsjtx_emitter.py` and the other fakes are built from our protocol docs, never adapted from the real programs' code or bundled sample tools.
-- **Dependencies must be permissive** (Apache, MIT, BSD, ISC, PSF) or LGPL used only as a separately installed or dynamically loaded library, such as PySide6 or libsndfile. GPL and AGPL dependencies are not allowed. CI enforces this with a license check, and any LGPL dependency is listed in `NOTICE` along with how it is used.
-- **Every source file starts with** `# SPDX-License-Identifier: Apache-2.0`.
+- **Dependencies must be permissive** (Apache, MIT, BSD, ISC, PSF), MPL-2.0, or LGPL used only as a separately installed or dynamically loaded library, such as PySide6 or libsndfile. GPL and AGPL dependencies are not allowed. CI enforces this with a license check, and any LGPL dependency is listed in `NOTICE` along with how it is used.
+- **Every source file starts with** `# SPDX-License-Identifier: MPL-2.0`, followed by the MPL notice ("This Source Code Form is subject to the terms of the Mozilla Public License, v. 2.0 …"); copy both from any existing file.
 - **Third-party program names** (WSJT-X, JTDX and so on) appear only to describe compatibility. They never appear in the app name, icons or branding.
 
 ## Scope: FT8 first, many modes soon
@@ -84,7 +84,7 @@ tests/
 docs/protocols/  our own write-ups of each wire protocol we read (wsjtx-udp.md, js8call-udp.md, rigctld.md, ...)
 tools/fake_wsjtx_emitter.py   lets contributors drive the app without a radio (built from docs/protocols)
 tools/capture_udp.py          records raw datagrams from a live station into fixtures/udp/
-LICENSE (Apache-2.0), NOTICE
+LICENSE (MPL-2.0), NOTICE
 ```
 
 ## Working rules for Claude
@@ -116,8 +116,8 @@ Each stage lists **what to build** and **the tests that must pass to call it don
 ### Stage 0: Scaffold
 
 Build:
-- `pyproject.toml` (distribution `signal-archive-recorder`, import package `signal_archive_recorder`, `license = "Apache-2.0"`, src layout, `[dev]` extras)
-- `LICENSE` (full Apache-2.0 text), `NOTICE`, SPDX headers
+- `pyproject.toml` (distribution `signal-archive-recorder`, import package `signal_archive_recorder`, `license = "MPL-2.0"`, src layout, `[dev]` extras)
+- `LICENSE` (full license text, now MPL-2.0), `NOTICE`, SPDX headers
 - CI license check (for example `pip-licenses --fail-on` a GPL/AGPL list) over the installed dependency tree
 - ruff, mypy and pytest config, plus a `hardware` marker that is skipped by default
 - CI workflow running on Windows and Linux
@@ -126,7 +126,7 @@ Build:
 Exit tests:
 - `pytest` runs and collects 0 failures; `ruff` and `mypy --strict` pass.
 - `test_version_exposed`: `signal_archive_recorder.__version__` matches `pyproject.toml`.
-- `test_spdx_headers`: every `.py` file under `src/`, `tests/` and `tools/` starts with the Apache-2.0 SPDX line.
+- `test_spdx_headers`: every `.py` file under `src/`, `tests/` and `tools/` starts with the SPDX line and carries the MPL notice.
 - The CI license check passes, with no GPL or AGPL packages in the dependency tree.
 
 ### Stage 1: Core events, clock, mode registry, chunk policy

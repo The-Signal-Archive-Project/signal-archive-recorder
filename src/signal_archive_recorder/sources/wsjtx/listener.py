@@ -1,4 +1,7 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: MPL-2.0
+# This Source Code Form is subject to the terms of the Mozilla Public License, v. 2.0.
+# If a copy of the MPL was not distributed with this file, You can obtain one at
+# https://mozilla.org/MPL/2.0/.
 """The WSJT-X / JTDX source adapter: UDP in, normalised bus events out.
 
 Receive only: the socket is never written to. Unicast and multicast are both

@@ -1,4 +1,7 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: MPL-2.0
+# This Source Code Form is subject to the terms of the Mozilla Public License, v. 2.0.
+# If a copy of the MPL was not distributed with this file, You can obtain one at
+# https://mozilla.org/MPL/2.0/.
 """The mode registry: every mode the recorder knows about, loaded from modes.json.
 
 Mode-specific behaviour lives here as data. Core code asks the registry instead of

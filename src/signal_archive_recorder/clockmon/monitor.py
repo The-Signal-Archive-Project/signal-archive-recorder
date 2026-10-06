@@ -1,4 +1,7 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: MPL-2.0
+# This Source Code Form is subject to the terms of the Mozilla Public License, v. 2.0.
+# If a copy of the MPL was not distributed with this file, You can obtain one at
+# https://mozilla.org/MPL/2.0/.
 """Check the computer clock against NTP at start-up and every 10 minutes.
 
 The offset is recorded even when the OS says it's synchronised: "synchronised"
