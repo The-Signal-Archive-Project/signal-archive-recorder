@@ -5,28 +5,152 @@
   "$defs": {
     "reason": {
       "description": "Why a value is unknown. A wrong default is worse than a blank, so unknown values are null with one of these reasons.",
-      "enum": ["source_unavailable", "not_reported", "not_applicable", "user_withheld"]
+      "enum": [
+        "source_unavailable",
+        "not_reported",
+        "not_applicable",
+        "user_withheld"
+      ]
     },
     "known": {
       "description": "A value, or null with the reason it is unknown. `source` names the program that reported it.",
       "type": "object",
-      "required": ["value", "reason"],
+      "required": [
+        "value",
+        "reason"
+      ],
       "properties": {
         "value": {},
-        "reason": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/reason" }] },
-        "source": { "type": ["string", "null"] }
+        "reason": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/reason"
+            }
+          ]
+        },
+        "source": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
       },
       "additionalProperties": false,
-      "if": { "properties": { "value": { "type": "null" } } },
-      "then": { "properties": { "reason": { "$ref": "#/$defs/reason" } } },
-      "else": { "properties": { "reason": { "type": "null" } } }
+      "if": {
+        "properties": {
+          "value": {
+            "type": "null"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "reason": {
+            "$ref": "#/$defs/reason"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "reason": {
+            "type": "null"
+          }
+        }
+      }
     },
     "utc": {
       "description": "UTC time in ISO 8601 with microseconds, e.g. 2026-10-05T12:03:07.000000Z",
       "type": "string",
       "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{6}Z$"
     },
-    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
-    "md5": { "type": "string", "pattern": "^[0-9a-f]{32}$" }
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "md5": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{32}$"
+    },
+    "clock_check": {
+      "description": "One measurement of the computer clock against NTP. offset_s = NTP time minus computer time; delay_s (round trip) bounds its uncertainty. Nothing is corrected in the recording.",
+      "type": "object",
+      "required": [
+        "measured_ns",
+        "measured_utc",
+        "offset_s",
+        "delay_s",
+        "stratum",
+        "server",
+        "status",
+        "os_synchronized",
+        "os_sync_tool"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "measured_ns": {
+          "type": "integer"
+        },
+        "measured_utc": {
+          "$ref": "#/$defs/utc"
+        },
+        "frame_offset": {
+          "type": "integer"
+        },
+        "stream_frame": {
+          "type": "integer"
+        },
+        "offset_s": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "delay_s": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "stratum": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "server": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "A public default server's name, or 'custom'"
+        },
+        "status": {
+          "enum": [
+            "green",
+            "yellow",
+            "red",
+            "unknown"
+          ]
+        },
+        "os_synchronized": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "os_sync_tool": {
+          "enum": [
+            "timedatectl",
+            "chronyc",
+            "w32tm",
+            "systemsetup",
+            null
+          ]
+        }
+      }
+    }
   }
 }

@@ -29,6 +29,11 @@ enabled = true
 port = 2237
 bind = "127.0.0.1"
 # group = "224.0.0.1"        # multicast, to share WSJT-X with GridTracker/JTAlert
+
+[clock]
+enabled = true               # NTP check at start and every interval_s
+interval_s = 600
+# servers = ["pool.ntp.org", "time.cloudflare.com", "time.google.com"]
 """
 
 from __future__ import annotations
@@ -39,6 +44,7 @@ from pathlib import Path
 from typing import Any
 
 from signal_archive_recorder.audio.format import SampleFormat
+from signal_archive_recorder.clockmon.monitor import DEFAULT_SERVERS
 from signal_archive_recorder.metadata.settings import StationSettings
 
 
@@ -67,12 +73,20 @@ class WsjtxConfig:
 
 
 @dataclass(frozen=True)
+class ClockConfig:
+    enabled: bool = True
+    interval_s: float = 600.0
+    servers: tuple[str, ...] = DEFAULT_SERVERS
+
+
+@dataclass(frozen=True)
 class RecorderConfig:
     storage_root: Path = field(default_factory=lambda: Path("~/SignalArchive").expanduser())
     audio: AudioConfig = field(default_factory=AudioConfig)
     target_chunk_s: int = 300
     station: StationSettings = field(default_factory=StationSettings)
     wsjtx: WsjtxConfig = field(default_factory=WsjtxConfig)
+    clock: ClockConfig = field(default_factory=ClockConfig)
 
 
 _SECTIONS = {
@@ -83,6 +97,7 @@ _SECTIONS = {
     "station": {"callsign", "share_callsign", "grid", "grid_precision", "hf_username",
                 "station_profile_id"},
     "wsjtx": {"enabled", "port", "bind", "group"},
+    "clock": {"enabled", "interval_s", "servers"},
 }  # fmt: skip
 
 
@@ -112,6 +127,9 @@ def parse_config(data: dict[str, Any], base: Path = Path()) -> RecorderConfig:
         raise ConfigError("[audio] needs a device (see --list-devices) or a file")
     station = data.get("station", {})
     wsjtx = data.get("wsjtx", {})
+    clock = data.get("clock", {})
+    if float(clock.get("interval_s", 600)) < 60:
+        raise ConfigError("[clock] interval_s must be at least 60 (be kind to NTP servers)")
     try:
         return RecorderConfig(
             storage_root=path(data.get("storage", {}).get("root", "~/SignalArchive")),
@@ -132,6 +150,11 @@ def parse_config(data: dict[str, Any], base: Path = Path()) -> RecorderConfig:
                 port=int(wsjtx.get("port", 2237)),
                 bind=wsjtx.get("bind", "127.0.0.1"),
                 group=wsjtx.get("group") or None,
+            ),
+            clock=ClockConfig(
+                enabled=bool(clock.get("enabled", True)),
+                interval_s=float(clock.get("interval_s", 600)),
+                servers=tuple(clock.get("servers", DEFAULT_SERVERS)),
             ),
         )
     except (TypeError, ValueError) as exc:

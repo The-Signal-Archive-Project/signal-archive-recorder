@@ -26,6 +26,7 @@ import jsonschema
 from referencing import Registry, Resource
 
 from signal_archive_recorder import __version__
+from signal_archive_recorder.clockmon.monitor import DEFAULT_SERVERS
 from signal_archive_recorder.metadata.privacy import DecodeRedactor, Scrubber
 from signal_archive_recorder.metadata.settings import StationSettings
 from signal_archive_recorder.modes.registry import ModeRegistry
@@ -51,7 +52,9 @@ EVENT_FIELDS = {
     "AudioGap": ("lost_frames", "reason"),
     "CaptureWarning": ("code",),
     "Note": ("detail",),
+    "ClockChecked": (),  # published through _clock_check
 }
+OS_SYNC_TOOLS = ("timedatectl", "chronyc", "w32tm", "systemsetup")
 DECODE_RAW_FIELDS = ("client_id", "new", "time_ms", "mode_symbol", "symbol_needs_mapping")
 
 
@@ -162,6 +165,11 @@ class MetadataBuilder:
                 "params": self._mode_params(rec["mode"]) if mode_value else {},
             },
             "path": {"type": known(None, SOURCE_UNAVAILABLE)},  # set by satellite sources
+            "clock": {
+                "previous_check": None
+                if rec.get("clock_before") is None
+                else self._clock_check(rec["clock_before"], rec["audio"]["start_frame"])
+            },
             "tx_intervals": [[s, e] for s, e in rec["tx_intervals"]],  # already chunk-relative
             "sources": {
                 name: {
@@ -305,6 +313,10 @@ class MetadataBuilder:
         }
         if ev.get("late"):
             out["late"] = True
+        if kind == "ClockChecked":
+            check = self._clock_check(ev, start)
+            check.pop("frame_offset")
+            return {**out, **check}
         for field in EVENT_FIELDS[kind]:
             if field not in ev:
                 continue
@@ -317,6 +329,23 @@ class MetadataBuilder:
         for field in set(ev) - set(out) - {"stream_frame", "message"}:
             self._drop(f"event field {kind}.{field}")
         return out
+
+    def _clock_check(self, check: dict[str, Any], start_frame: int) -> dict[str, Any]:
+        server = check.get("server")
+        tool = check.get("os_sync_tool")
+        return {
+            "measured_ns": check["measured_ns"],
+            "measured_utc": utc_iso(check["measured_ns"]),
+            "frame_offset": check["stream_frame"] - start_frame,
+            "offset_s": _round(check.get("offset_s"), 6),
+            "delay_s": _round(check.get("delay_s"), 6),
+            "stratum": check.get("stratum"),
+            # A home network's time server name isn't published.
+            "server": server if server in DEFAULT_SERVERS or server is None else "custom",
+            "status": check.get("status", "unknown"),
+            "os_synchronized": check.get("os_synchronized"),
+            "os_sync_tool": tool if tool in OS_SYNC_TOOLS else None,
+        }
 
     # -- sessions ----------------------------------------------------------------
 
@@ -360,13 +389,25 @@ class MetadataBuilder:
                 "channels": info["audio"]["channels"],
                 "bit_depth": {"int16": 16, "int24": 24}[info["audio"]["sample_format"]],
             },
-            "clock": {"time_source": known(None, NOT_REPORTED), "offsets": []},
+            "clock": self._session_clock(info.get("clock_checks", [])),
             "software": {self._text(k): self._text(v) for k, v in info["software"].items()},
             "chunks": list(info["chunks"]),
             "labels": [self._text(x) for x in info.get("labels", [])],
         }
         self._check(self._session_validator, meta, info["session_id"])
         return meta
+
+    def _session_clock(self, checks: list[dict[str, Any]]) -> dict[str, Any]:
+        public = []
+        for c in checks:
+            entry = self._clock_check(c, 0)
+            entry["stream_frame"] = entry.pop("frame_offset")
+            public.append(entry)
+        measured = any(c["offset_s"] is not None for c in public)
+        return {
+            "time_source": known("ntp" if measured else None, SOURCE_UNAVAILABLE),
+            "checks": public,
+        }
 
     def validate_session(self, doc: dict[str, Any]) -> None:
         self._check(self._session_validator, doc, doc.get("session_id", "session"))

@@ -28,3 +28,8 @@ enabled = true
 port = 2237
 bind = "127.0.0.1"
 # group = "224.0.0.1"        # multicast: share WSJT-X with GridTracker or JTAlert
+
+[clock]
+enabled = true               # checks the computer clock against NTP at start and every
+interval_s = 600             # 10 minutes; never changes your clock or the recordings
+# servers = ["pool.ntp.org", "time.cloudflare.com", "time.google.com"]

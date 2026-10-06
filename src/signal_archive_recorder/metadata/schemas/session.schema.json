@@ -194,27 +194,18 @@
       "type": "object",
       "required": [
         "time_source",
-        "offsets"
+        "checks"
       ],
       "additionalProperties": false,
+      "description": "NTP checks at start and every 10 minutes. With each chunk's audio.sync_points (sample frame vs computer time) they link every sample to true UTC, so the pipeline can correct both computer-clock and sound-card drift.",
       "properties": {
         "time_source": {
           "$ref": "https://signal-archive-project.org/schemas/recorder/common/1#/$defs/known"
         },
-        "offsets": {
+        "checks": {
           "type": "array",
           "items": {
-            "type": "array",
-            "prefixItems": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "number"
-              }
-            ],
-            "items": false,
-            "minItems": 2
+            "$ref": "https://signal-archive-project.org/schemas/recorder/common/1#/$defs/clock_check"
           }
         }
       }

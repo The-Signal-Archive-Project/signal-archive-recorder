@@ -16,7 +16,8 @@
     "path",
     "tx_intervals",
     "sources",
-    "events"
+    "events",
+    "clock"
   ],
   "additionalProperties": false,
   "properties": {
@@ -407,7 +408,8 @@
               "TxEnded",
               "AudioGap",
               "CaptureWarning",
-              "Note"
+              "Note",
+              "ClockChecked"
             ]
           },
           "source": {
@@ -465,7 +467,80 @@
               "integer",
               "null"
             ]
+          },
+          "measured_ns": {
+            "type": "integer"
+          },
+          "measured_utc": {
+            "$ref": "https://signal-archive-project.org/schemas/recorder/common/1#/$defs/utc"
+          },
+          "offset_s": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "delay_s": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "stratum": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "server": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "enum": [
+              "green",
+              "yellow",
+              "red",
+              "unknown"
+            ]
+          },
+          "os_synchronized": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "os_sync_tool": {
+            "enum": [
+              "timedatectl",
+              "chronyc",
+              "w32tm",
+              "systemsetup",
+              null
+            ]
           }
+        }
+      }
+    },
+    "clock": {
+      "type": "object",
+      "required": [
+        "previous_check"
+      ],
+      "additionalProperties": false,
+      "description": "The latest clock check before this chunk began; checks during the chunk are in events.",
+      "properties": {
+        "previous_check": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "https://signal-archive-project.org/schemas/recorder/common/1#/$defs/clock_check"
+            }
+          ]
         }
       }
     }

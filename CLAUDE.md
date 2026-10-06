@@ -61,7 +61,7 @@ v0.1 targets **FT8 through WSJT-X**, but we'll add more modes quickly: FT4, WSPR
 
 ## Stack and layout
 
-Python ≥ 3.11. Libraries: `sounddevice`, `soundfile` (plus the `flac` CLI for verification), `numpy`, `ntplib`, `jsonschema`, `huggingface_hub`, `keyring`, `PySide6`, `sigmf` (later). Use stdlib `socket` + `struct` for QDataStream, plain TCP for rigctld, and `xmlrpc.client` for flrig and fldigi.
+Python ≥ 3.11. Libraries: `sounddevice`, `soundfile`, `numpy`, `ntplib`, `jsonschema`, `huggingface_hub`, `keyring`, `PySide6`, `sigmf` (later). Use stdlib `socket` + `struct` for QDataStream, plain TCP for rigctld, and `xmlrpc.client` for flrig and fldigi.
 
 ```
 src/signal_archive_recorder/
@@ -70,7 +70,7 @@ src/signal_archive_recorder/
   audio/       device.py, ringbuffer.py, capture.py, flac_writer.py, levels.py
   sources/     base.py (Source protocol), wsjtx/{qdatastream.py,messages.py,listener.py},
                rigctld.py, flrig.py, fldigi.py, js8call.py, satellite/
-  clockmon/    ntp.py, os_sync.py, gps.py
+  clockmon/    monitor.py (NTP checks), os_sync.py, gps.py (later)
   session/     manager.py (owns timeline), chunker.py, storage.py (session folder layout)
   metadata/    builder.py, privacy.py, schemas/{session,chunk}.schema.json
   upload/      queue.py, hf.py, consent.py
@@ -281,6 +281,27 @@ Exit tests:
 - `test_missing_device_fails_cleanly`, plus `tests/unit/test_config.py`.
 - Hardware/manual: run against your own station for an evening, and spot-check that the WSJT-X labels line up with audio timestamps.
 
+### Stage 7b: Clock monitor (moved forward into v0.1)
+
+Every recording needs a timing reference from the first session, so this runs in v0.1. There are three clocks:
+- **Sound card**, the sample clock: tied to computer time by each chunk's `audio.sync_points` (Stage 5).
+- **Computer clock:** checked against **NTP at start and every 10 minutes** (`[clock] interval_s`, at least 60). The offset is recorded even when the OS says it's synced: in testing, this laptop was 0.30 s behind five independent NTP servers while reporting `NTPSynchronized=yes`.
+- **True UTC**, from NTP.
+
+Together these give the pipeline the true UTC of every sample and the sound card's true rate. **The recorder never corrects the recordings or the computer clock**; correction is the pipeline's job.
+
+Build:
+- `clockmon/monitor.py` `ClockMonitor`: tries servers in order (`pool.ntp.org`, `time.cloudflare.com`, `time.google.com`, or configured ones) and publishes `ClockChecked` with the offset (NTP time minus computer time), round-trip delay, stratum, server and status. Thresholds: green under 0.1 s, yellow 0.1–0.5 s, red over 0.5 s (red also publishes an operator `CaptureWarning`). If no server answers, the offset is `null`. Failures never reach audio.
+- `clockmon/os_sync.py`: the OS's own view (`timedatectl`/`chronyc`, `w32tm`, `systemsetup`), keeping only yes/no and the tool's name, since tool output can name local servers.
+- Metadata: `session.json` `clock.checks` (all checks, with stream frame) and `time_source` (`ntp`, or `null`/`source_unavailable`). Each chunk has `clock.previous_check`, plus `ClockChecked` events at their frame offsets. Server names are published only if they're a public default; otherwise they become `custom`.
+- Tests never use the network: `Recorder(ntp_probe=…)` takes a fake.
+
+Exit tests:
+- `test_clock_thresholds`, `test_red_offset_warns_operator`, `test_ntp_unreachable_falls_back_then_gives_up`, `test_monitor_checks_at_start_and_on_interval` and `test_monitor_survives_a_broken_os_reader`.
+- `test_os_sync_parsers` and `test_read_os_sync_falls_back_and_never_keeps_output`.
+- `test_clock_checks_in_metadata` (validates, and private server names don't leak).
+- `test_drift_chain_allows_correction`: with a sound card 100 ppm fast and a computer clock 0.25 s behind, the published metadata alone recovers the card's true rate (±0.02 Hz) and the true UTC of the first sample.
+
 **→ Tag v0.1.**
 
 ### Stage 8: Consent, token and upload (v0.2)
@@ -305,7 +326,7 @@ Exit tests (all against `fake_hf.py`):
 ### Stage 9: Robustness (v0.3)
 
 Build:
-- Clock monitor (NTP at start and every 10 minutes, OS sync state from `w32tm`, `timedatectl`/`chronyc` or `sntp`, optional GPS, green/yellow/red thresholds)
+- Optional GPS/GPSDO as a time source (the NTP clock monitor moved forward into v0.1, Stage 7b)
 - Multicast setup help
 - Resume and retry with backoff
 - Bandwidth cap, "upload now" and "upload overnight"
@@ -313,9 +334,6 @@ Build:
 - PySide6 tray and status window: checklist, level meter, "mark this" notes, pause/resume
 
 Exit tests:
-- `test_clock_thresholds`: offsets of 0.05, 0.3 and 0.8 s give green, yellow (recorded and flagged) and red (warned, still recording).
-- `test_ntp_unreachable`: the offset is `null`/`source_unavailable` and recording continues.
-- `test_os_sync_parsers`: captured output fixtures from each OS command parse correctly.
 - `test_retry_backoff_and_resume`: an interrupted upload resumes without re-sending finished files, and the backoff delays are bounded.
 - `test_bandwidth_cap`: measured throughput against the fake stays ≤ the cap (±10%).
 - `test_disk_limit`: hitting the limit deletes only confirmed-uploaded sessions (oldest first). Unconfirmed sessions are never deleted. If nothing can be deleted, a warning is raised.

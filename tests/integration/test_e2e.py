@@ -21,6 +21,7 @@ import soundfile as sf
 from signal_archive_recorder.audio.device import DeviceInfo
 from signal_archive_recorder.audio.flac_writer import array_to_raw, verify_flac
 from signal_archive_recorder.audio.format import AudioFormat
+from signal_archive_recorder.clockmon.monitor import NtpAnswer
 from signal_archive_recorder.config import AudioConfig, RecorderConfig, WsjtxConfig
 from signal_archive_recorder.core.clock import FakeClock
 from signal_archive_recorder.metadata.builder import _schemas
@@ -43,6 +44,11 @@ def utc_ns(hhmmss: str) -> int:
 def validator(name: str) -> jsonschema.Draft202012Validator:
     schemas, registry = _schemas()
     return jsonschema.Draft202012Validator(schemas[name], registry=registry)
+
+
+def fake_ntp(server: str) -> NtpAnswer:
+    """Tests never touch the network: a computer clock 12 ms behind NTP."""
+    return NtpAnswer(offset_s=0.012, delay_s=0.020, stratum=2)
 
 
 def make_config(root: Path, **audio: Any) -> RecorderConfig:
@@ -89,7 +95,9 @@ def test_e2e_ft8_session(tmp_path: Path) -> None:
     backend = FakeBackend(
         [DEVICE], data, on_block=lambda n: clock.advance(n * S // FMT.sample_rate)
     )
-    recorder = Recorder(make_config(tmp_path, buffer_seconds=800), backend=backend, clock=clock)
+    recorder = Recorder(
+        make_config(tmp_path, buffer_seconds=800), backend=backend, clock=clock, ntp_probe=fake_ntp
+    )
     session = recorder.start()
     wsjtx = FakeWsjtx(recorder)
     wsjtx.send(m.Heartbeat("WSJT-X", 3, "3.0.2", ""))
@@ -141,6 +149,8 @@ def test_e2e_ft8_session(tmp_path: Path) -> None:
     validator("session").validate(session_meta)
     assert session_meta["end_reason"] == "test" and session_meta["labels"] == ["wsjtx"]
     assert session_meta["software"] == {"wsjtx": "WSJT-X 3.0.2"}
+    assert session_meta["clock"]["time_source"]["value"] == "ntp"
+    assert session_meta["clock"]["checks"][0]["offset_s"] == 0.012
     stats = [json.loads(x) for x in (labels / "chunk_stats.jsonl").read_text().splitlines()]
     for line in stats:
         validator("label_stats").validate(line)
@@ -173,7 +183,12 @@ def test_restart_recovers_partial(tmp_path: Path) -> None:
         backend = FakeBackend(
             [DEVICE], noise(FMT, seconds), on_block=lambda n: clock.advance(n * S // 8000)
         )
-        recorder = Recorder(make_config(tmp_path, buffer_seconds=200), backend=backend, clock=clock)
+        recorder = Recorder(
+            make_config(tmp_path, buffer_seconds=200),
+            backend=backend,
+            clock=clock,
+            ntp_probe=fake_ntp,
+        )
         recorder.start()
         assert backend.stream is not None
         backend.stream.pump()
@@ -218,7 +233,7 @@ def test_sigterm_mid_chunk(tmp_path: Path) -> None:
     config.write_text(
         f"[storage]\nroot = {json.dumps(str(root))}\n"
         f'[audio]\nfile = {json.dumps(str(wav))}\nsample_format = "int16"\n'
-        "[wsjtx]\nport = 0\n"
+        "[wsjtx]\nport = 0\n[clock]\nenabled = false\n"  # no network in tests
     )
     flags = subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0  # type: ignore[attr-defined]
     proc = subprocess.Popen(

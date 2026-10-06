@@ -107,6 +107,26 @@ class CaptureWarning(Event):
     message: str
 
 
+@dataclass(frozen=True, kw_only=True)
+class ClockChecked(Event):
+    """One measurement of the computer clock against an NTP server.
+
+    offset_s is NTP time minus computer time (None if no server answered), with
+    delay_s the round trip that bounds its uncertainty. measured_ns is the computer
+    clock when the answer arrived. Together with the audio sync points this links
+    every sample to true UTC; the recorder records it and never corrects anything.
+    """
+
+    measured_ns: int
+    offset_s: float | None
+    delay_s: float | None = None
+    stratum: int | None = None
+    server: str | None = None
+    status: str = "unknown"  # green, yellow, red, or unknown
+    os_synchronized: bool | None = None
+    os_sync_tool: str | None = None
+
+
 @dataclass(frozen=True)
 class Stamped:
     """An event as delivered by the bus: system time when published, plus sequence."""

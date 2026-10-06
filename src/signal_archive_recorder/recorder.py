@@ -25,6 +25,7 @@ from signal_archive_recorder.audio.device import (
 from signal_archive_recorder.audio.file_backend import FileBackend
 from signal_archive_recorder.audio.flac_recovery import Recovery
 from signal_archive_recorder.audio.timeline import StreamTimeline
+from signal_archive_recorder.clockmon.monitor import ClockMonitor, NtpProbe, ntplib_probe
 from signal_archive_recorder.config import RecorderConfig
 from signal_archive_recorder.core.bus import EventBus
 from signal_archive_recorder.core.clock import Clock, SystemClock
@@ -64,6 +65,7 @@ class Recorder:
         backend: AudioBackend | None = None,
         clock: Clock | None = None,
         registry: ModeRegistry | None = None,
+        ntp_probe: NtpProbe = ntplib_probe,
     ) -> None:
         self.config = config
         self.clock = clock or SystemClock()
@@ -74,6 +76,8 @@ class Recorder:
         self.capture: Capture | None = None
         self.stream: InputStream | None = None
         self.listener: WsjtxListener | None = None
+        self.clock_monitor: ClockMonitor | None = None
+        self._ntp_probe = ntp_probe
         self.recovered: list[Recovery] = []
 
     def _make_backend(self) -> AudioBackend:
@@ -123,6 +127,16 @@ class Recorder:
             log.warning("%s", warning.message)
             bus.publish(warning)
 
+        if cfg.clock.enabled:
+            self.clock_monitor = ClockMonitor(
+                bus,
+                self.clock,
+                servers=cfg.clock.servers,
+                interval_s=cfg.clock.interval_s,
+                probe=self._ntp_probe,
+            )
+            self.clock_monitor.start()
+
         if cfg.wsjtx.enabled:
             self.listener = WsjtxListener(
                 bus,
@@ -158,6 +172,8 @@ class Recorder:
         stats = self.capture.stop(timeout=30)
         if self.listener is not None:
             self.listener.stop()
+        if self.clock_monitor is not None:
+            self.clock_monitor.stop()
         self.bus.wait_idle()
         chunks = self.manager.close(end_reason=reason)
         self.bus.close()

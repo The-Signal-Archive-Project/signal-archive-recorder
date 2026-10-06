@@ -21,6 +21,7 @@ classifiers = [
 # Runtime dependencies are added stage by stage; see CLAUDE.md.
 dependencies = [
     "jsonschema>=4.18",
+    "ntplib>=0.4",
     "referencing>=0.28",
     "numpy>=1.26",
     "sounddevice>=0.4.7",
@@ -66,5 +67,5 @@ python_version = "3.11"
 files = ["src", "tools"]
 
 [[tool.mypy.overrides]]
-module = ["sounddevice", "soundfile"]
+module = ["sounddevice", "soundfile", "ntplib"]
 ignore_missing_imports = true
