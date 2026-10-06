@@ -368,6 +368,9 @@ class MetadataBuilder:
         self._check(self._session_validator, meta, info["session_id"])
         return meta
 
+    def validate_session(self, doc: dict[str, Any]) -> None:
+        self._check(self._session_validator, doc, doc.get("session_id", "session"))
+
     # -- decode logs -------------------------------------------------------------
 
     def decode_line(self, line: dict[str, Any]) -> dict[str, Any]:

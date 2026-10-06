@@ -13,6 +13,23 @@ Station-side recorder for the **Signal Archive Project**. It captures bit-exact 
 
 FT8 comes first. Other digital modes (FT4, WSPR, JS8, Q65, PSK31, RTTY and more) are planned soon after.
 
+## Running it (v0.1, headless)
+
+```bash
+pip install -e .
+signal-archive-recorder --list-devices            # find your rig's sound card
+cp examples/recorder.toml recorder.toml           # set [audio] device, [station], [wsjtx]
+signal-archive-recorder --headless --config recorder.toml
+```
+
+It records until Ctrl-C, then finishes the current chunk. Each session is saved to `~/SignalArchive/sessions/<UTC start>/`:
+
+- `recordings/`: verified FLAC chunks and their metadata
+- `labels/wsjtx/`: what WSJT-X decoded, kept separate from the recordings
+- `session.json`: the session's details
+
+No radio? Set `[audio] file = "something.wav"` to play a 16- or 24-bit WAV as if it were a sound card, and run `python tools/fake_wsjtx_emitter.py` to stand in for WSJT-X.
+
 ## Development
 
 ```bash

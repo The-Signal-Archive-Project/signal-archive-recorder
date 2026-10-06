@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import itertools
 import wave
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from pathlib import Path
 
 import numpy as np
@@ -134,11 +134,15 @@ class FakeBackend:
         *,
         delivered_rate: int | None = None,
         refuse_shared: bool = False,
+        on_block: Callable[[int], None] | None = None,
+        block_frames: Iterable[int] = (480,),
     ) -> None:
         self.devices = devices
         self.data = data
         self.delivered_rate = delivered_rate
         self.refuse_shared = refuse_shared
+        self.on_block = on_block  # e.g. advance a FakeClock as each block "arrives"
+        self.block_frames = tuple(block_frames)
         self.open_calls: list[tuple[DeviceInfo, AudioFormat]] = []
         self.stream: FakeAudioDevice | None = None
 
@@ -154,5 +158,13 @@ class FakeBackend:
         delivered = AudioFormat(
             self.delivered_rate or fmt.sample_rate, fmt.channels, fmt.sample_format
         )
-        self.stream = FakeAudioDevice(delivered, self.data, callback)
+        forward = callback
+        if self.on_block is not None:
+            hook = self.on_block
+
+            def forward(data: memoryview, frames: int, overflow: bool) -> None:
+                hook(frames)
+                callback(data, frames, overflow)
+
+        self.stream = FakeAudioDevice(delivered, self.data, forward, block_frames=self.block_frames)
         return self.stream

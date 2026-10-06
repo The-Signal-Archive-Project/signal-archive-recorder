@@ -263,15 +263,23 @@ Exit tests:
 ### Stage 7: Headless CLI, end-to-end (finishes v0.1)
 
 Build:
-- `cli.py --headless --config file.toml`
-- Startup recovery of `.partial` files
-- Graceful shutdown that finalises the current chunk and writes `session.json` end time
+- `config.py`: a TOML config (`examples/recorder.toml`) with sections for storage, audio (device name, or a WAV file), chunking, station (callsign and sharing choice, grid and precision) and wsjtx. Unknown sections and keys are errors.
+- `recorder.py` `Recorder`. Start order: recover, open the device (so a missing device fails before any session exists), open the session, start the listener, start the capture writer, then start the stream. Stop runs in reverse, with sources stopped before the session closes.
+- `session/recovery.py`: `.flac.partial` files under `sessions/*/recordings/` are recovered with metadata built from the audio alone (`recovered`/`crashed`, timeline unknown), and the crashed session's `session.json` is updated. Unrecoverable files move to `local/`.
+- `audio/file_backend.py` `FileBackend`: plays a 16- or 24-bit WAV as if it were a sound card, in real time or faster, through `[audio] file = …`.
+- `cli.py`: `signal-archive-recorder --headless --config FILE`, `--list-devices` and `--version`. SIGINT, SIGTERM and SIGBREAK (Windows Ctrl-Break) stop cleanly. Exit codes: 0 for a clean stop, 2 for a config error, 3 for an audio device problem.
 
 Exit tests:
-- `test_e2e_ft8_session` (integration): a 12-minute simulated FT8 session (fake audio from fixtures, fake WSJT-X with decodes, one band change, two TX periods) produces the expected chunk count. Every FLAC verifies, every JSON validates, decodes are in the JSONL, and the privacy scan is clean.
-- `test_sigterm_mid_chunk`: SIGTERM finalises a valid short chunk, and `session.json` has an end time.
-- `test_restart_recovers_partial`.
-- Hardware/manual: run against your own station for an evening and spot-check that the decodes line up with audio timestamps.
+- `test_e2e_ft8_session` (`tests/integration`): the real `Recorder` with a fake sound card on a fake clock and real UDP WSJT-X datagrams, running 12 minutes of FT8 with one band change and two TX periods. It checks:
+  - the expected 5 chunks, with boundaries, end reasons and TX intervals
+  - every FLAC verifies, and together they concatenate to the input byte for byte
+  - every chunk, session, label-stats and decode file validates
+  - all 90 decodes are in `labels/wsjtx/decodes.jsonl`, with the operator's call redacted
+  - the privacy scan of the whole session folder is clean
+- `test_sigterm_mid_chunk`: a real CLI process on `FileBackend` gets SIGTERM (Ctrl-Break on Windows) about 2.5 s in. It exits 0, writes one verified short chunk that's a bit-exact prefix of the WAV, and `session.json` has its end time and `end_reason: "signal"`.
+- `test_restart_recovers_partial`: a crashed chunk is recovered with valid metadata, a garbage partial moves to `local/`, and the old session is marked `crashed`.
+- `test_missing_device_fails_cleanly`, plus `tests/unit/test_config.py`.
+- Hardware/manual: run against your own station for an evening, and spot-check that the WSJT-X labels line up with audio timestamps.
 
 **→ Tag v0.1.**
 
