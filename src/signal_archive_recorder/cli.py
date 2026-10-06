@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 """Command line for Signal Archive Recorder.
 
-    signal-archive-recorder record --config recorder.toml   record until Ctrl-C
+    signal-archive-recorder init                            create a starter configuration
+    signal-archive-recorder record                          record until Ctrl-C
     signal-archive-recorder devices                         list audio inputs
     signal-archive-recorder consent                         read and accept the terms
     signal-archive-recorder login                           store a Hugging Face token
@@ -35,14 +36,14 @@ from signal_archive_recorder.config import ConfigError, RecorderConfig, load_con
 from signal_archive_recorder.core.clock import Clock, SystemClock
 from signal_archive_recorder.metadata.builder import MetadataBuilder
 from signal_archive_recorder.modes import ModeRegistry
-from signal_archive_recorder.paths import config_dir, default_config_file
+from signal_archive_recorder.paths import config_dir, default_config_file, example_config
 from signal_archive_recorder.recorder import Recorder
 from signal_archive_recorder.session.storage import SessionStorage
 from signal_archive_recorder.upload.consent import CONSENT_TEXT, ConsentStore, NoConsentError
 from signal_archive_recorder.upload.hub import HfHub, Hub, HubError, check_token
 from signal_archive_recorder.upload.queue import NotLoggedInError, Uploader, UploadState
 from signal_archive_recorder.upload.review import ReviewError, format_review, review
-from signal_archive_recorder.upload.token import Token, TokenStore
+from signal_archive_recorder.upload.token import KeyringUnavailableError, Token, TokenStore
 
 log = logging.getLogger("signal_archive_recorder")
 
@@ -74,7 +75,7 @@ def _config(path: Path | None) -> RecorderConfig:
     path = path or default_config_file()
     if not path.exists():
         raise ConfigError(
-            f"no configuration at {path}. Copy examples/recorder.toml there, or pass --config"
+            f"no configuration at {path}. Create one with: signal-archive-recorder init"
         )
     return load_config(path)
 
@@ -124,10 +125,41 @@ def cmd_record(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_init(args: argparse.Namespace) -> int:
+    path: Path = args.config or default_config_file()
+    if path.exists() and not args.force:
+        print(f"{path} already exists; edit it, or use --force to start again.", file=sys.stderr)
+        return EXIT_CONFIG
+    text = example_config()
+    device = args.device
+    if device is None and sys.stdin.isatty():
+        try:
+            names = [d.name for d in SoundDeviceBackend().input_devices()]
+        except (DeviceUnavailableError, OSError) as exc:
+            print(f"(couldn't list audio devices: {exc})", file=sys.stderr)
+            names = []
+        for i, name in enumerate(names, 1):
+            print(f"  {i}. {name}")
+        if names:
+            choice = input("Which input is your radio? Number (Enter to set it later): ").strip()
+            if choice.isdigit() and 1 <= int(choice) <= len(names):
+                device = names[int(choice) - 1]
+    if device:
+        escaped = device.replace("\\", "\\\\").replace('"', '\\"')
+        text = text.replace('device = "USB Audio CODEC"', f'device = "{escaped}"', 1)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+    print(f"Wrote {path}")
+    if not device:
+        print("Set [audio] device in it (see: signal-archive-recorder devices).")
+    print("Next: edit [station] if you like, then: signal-archive-recorder record")
+    return 0
+
+
 def cmd_devices(args: argparse.Namespace) -> int:
     try:
         devices = SoundDeviceBackend().input_devices()
-    except OSError as exc:
+    except (DeviceUnavailableError, OSError) as exc:
         print(f"audio system unavailable: {exc}", file=sys.stderr)
         return EXIT_DEVICE
     for d in devices:
@@ -166,7 +198,11 @@ def cmd_login(args: argparse.Namespace) -> int:
     except (ValueError, HubError) as exc:
         print(f"login failed: {exc}", file=sys.stderr)
         return EXIT_LOGIN
-    _tokens().set(token)
+    try:
+        _tokens().set(token)
+    except KeyringUnavailableError as exc:
+        print(f"login failed: {exc}", file=sys.stderr)
+        return EXIT_LOGIN
     print(f"Logged in to Hugging Face as {identity.username}. The token is in your OS keyring.")
     return 0
 
@@ -213,7 +249,7 @@ def cmd_upload(args: argparse.Namespace) -> int:
     except NoConsentError as exc:
         print(str(exc), file=sys.stderr)
         return EXIT_CONSENT
-    except (NotLoggedInError, HubError) as exc:
+    except (NotLoggedInError, HubError, KeyringUnavailableError) as exc:
         print(str(exc), file=sys.stderr)
         return EXIT_LOGIN
     if not results:
@@ -263,6 +299,9 @@ def build_parser() -> argparse.ArgumentParser:
         p.set_defaults(func=func)
         return p
 
+    p = add("init", cmd_init, "create a starter configuration file")
+    p.add_argument("--device", help="audio input name (default: ask)")
+    p.add_argument("--force", action="store_true", help="replace an existing file")
     add("record", cmd_record, "record until Ctrl-C")
     add("devices", cmd_devices, "list audio inputs")
     p = add("consent", cmd_consent, "read and accept the contribution terms")

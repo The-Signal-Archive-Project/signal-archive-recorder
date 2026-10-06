@@ -1,6 +1,7 @@
 # Signal Archive Recorder configuration.
-# Run: signal-archive-recorder --headless --config recorder.toml
-# Find your device name with: signal-archive-recorder --list-devices
+# Created by `signal-archive-recorder init`; edit freely.
+# Find your device name with: signal-archive-recorder devices
+# Then record with:           signal-archive-recorder record
 
 [storage]
 root = "~/SignalArchive"

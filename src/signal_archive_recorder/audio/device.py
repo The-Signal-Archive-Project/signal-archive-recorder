@@ -142,11 +142,26 @@ def _resampling_warning(device: DeviceInfo, rate: int, native: int) -> CaptureWa
     )
 
 
+def _portaudio_help() -> str:
+    import platform
+
+    if platform.system() == "Linux":
+        return (
+            "The PortAudio library isn't installed. Debian/Ubuntu/Raspberry Pi OS: sudo apt "
+            "install libportaudio2. Fedora: sudo dnf install portaudio. Arch: sudo pacman -S "
+            "portaudio"
+        )
+    return "The PortAudio library couldn't be loaded; try reinstalling signal-archive-recorder"
+
+
 class SoundDeviceBackend:
     """PortAudio via the sounddevice package. Imported lazily so tests don't need it."""
 
     def __init__(self) -> None:
-        import sounddevice
+        try:
+            import sounddevice
+        except OSError as exc:  # the PortAudio library itself is missing
+            raise DeviceUnavailableError(f"{_portaudio_help()} ({exc})") from None
 
         self._sd: Any = sounddevice
 

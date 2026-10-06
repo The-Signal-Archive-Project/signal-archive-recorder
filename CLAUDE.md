@@ -264,7 +264,7 @@ Exit tests:
 ### Stage 7: Headless CLI, end-to-end (finishes v0.1)
 
 Build:
-- `config.py`: a TOML config (`examples/recorder.toml`) with sections for storage, audio (device name, or a WAV file), chunking, station (callsign and sharing choice, grid and precision) and wsjtx. Unknown sections and keys are errors.
+- `config.py`: a TOML config (`src/signal_archive_recorder/data/recorder.example.toml`, written by `signal-archive-recorder init` to the per-user config folder) with sections for storage, audio (device name, or a WAV file), chunking, station (callsign and sharing choice, grid and precision) and wsjtx. Unknown sections and keys are errors.
 - `recorder.py` `Recorder`. Start order: recover, open the device (so a missing device fails before any session exists), open the session, start the listener, start the capture writer, then start the stream. Stop runs in reverse, with sources stopped before the session closes.
 - `session/recovery.py`: `.flac.partial` files under `sessions/*/recordings/` are recovered with metadata built from the audio alone (`recovered`/`crashed`, timeline unknown), and the crashed session's `session.json` is updated. Unrecoverable files move to `local/`.
 - `audio/file_backend.py` `FileBackend`: plays a 16- or 24-bit WAV as if it were a sound card, in real time or faster, through `[audio] file = …`.
