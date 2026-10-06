@@ -2,6 +2,15 @@
 
 All notable changes to Signal Archive Recorder. Versions follow [semantic versioning](https://semver.org/); before 1.0, minor versions may change behaviour.
 
+## [Unreleased]
+
+### Uploads
+- **Resumable uploads:** a session goes up in steps within its one pull request (each chunk, then labels and `session.json`). If the connection drops, the next attempt sends only what's missing.
+- **Backoff:** automatic retries wait longer after each failure (1 minute, doubling, up to 6 hours).
+- **Bandwidth cap:** `[upload] max_mbps` keeps the average upload speed under a limit.
+- **Background uploading** while recording, using `[upload] schedule = "while_recording"` or `"overnight"` (within `overnight_window`).
+- **Disk limits:** `[storage] max_gb`, `delete_after_days` and `cleanup [--dry-run]`. Only sessions whose upload has been confirmed (validated or merged) are ever deleted.
+
 ## [0.1.0] - 2026-10-06
 
 The first release. It records bit-exact receive audio from a ham station, labels it with context from WSJT-X, and contributes it to the Signal Archive Project's open dataset on Hugging Face. FT8 and FT4 are fully supported, and the mode registry already covers WSPR, JT65, Q65, MSK144, JS8, PSK31, RTTY and CW for upcoming decoder integrations.
@@ -33,4 +42,5 @@ The first release. It records bit-exact receive audio from a ham station, labels
 - No GPL dependencies (enforced in CI); DCO sign-off on every commit.
 - CI on Linux and Windows with Python 3.11 and 3.14.
 
+[Unreleased]: https://github.com/The-Signal-Archive-Project/signal-archive-recorder/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/The-Signal-Archive-Project/signal-archive-recorder/releases/tag/v0.1.0

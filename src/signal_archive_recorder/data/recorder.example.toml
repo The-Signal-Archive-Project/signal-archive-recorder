@@ -5,6 +5,8 @@
 
 [storage]
 root = "~/SignalArchive"
+max_gb = 0                   # archive size limit; only confirmed uploads are deleted; 0 = off
+delete_after_days = 0        # delete confirmed uploads this many days later; 0 = never
 
 [audio]
 device = "USB Audio CODEC"   # part of the device name
@@ -37,3 +39,6 @@ interval_s = 600             # 10 minutes; never changes your clock or the recor
 
 [upload]
 repo = "signal-archive-project/signal-archive-intake"   # each session becomes one pull request
+schedule = "manual"          # manual, while_recording or overnight (uploads in the background)
+overnight_window = "01:00-06:00"   # local time, for schedule = "overnight"
+max_mbps = 0                 # average upload cap in megabits/s; 0 = no cap

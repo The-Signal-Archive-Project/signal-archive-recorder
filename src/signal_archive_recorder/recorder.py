@@ -13,6 +13,7 @@ which finalises the last chunk and writes session.json.
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -36,11 +37,17 @@ from signal_archive_recorder.core.clock import Clock, SystemClock
 from signal_archive_recorder.core.events import CaptureWarning
 from signal_archive_recorder.metadata.builder import MetadataBuilder
 from signal_archive_recorder.modes import ModeRegistry
+from signal_archive_recorder.paths import config_dir
 from signal_archive_recorder.session.disk import DiskMonitor
 from signal_archive_recorder.session.manager import SessionManager
 from signal_archive_recorder.session.recovery import recover_storage
 from signal_archive_recorder.session.storage import SessionDir, SessionStorage
 from signal_archive_recorder.sources.wsjtx.listener import SETUP_HELP, WsjtxListener
+from signal_archive_recorder.upload.consent import ConsentStore
+from signal_archive_recorder.upload.hub import HfHub
+from signal_archive_recorder.upload.queue import Uploader
+from signal_archive_recorder.upload.service import UploadService, Window
+from signal_archive_recorder.upload.token import TokenStore
 
 log = logging.getLogger(__name__)
 
@@ -72,6 +79,7 @@ class Recorder:
         clock: Clock | None = None,
         registry: ModeRegistry | None = None,
         ntp_probe: NtpProbe = ntplib_probe,
+        uploader_factory: Callable[[], Uploader] | None = None,
     ) -> None:
         self.config = config
         self.clock = clock or SystemClock()
@@ -84,6 +92,8 @@ class Recorder:
         self.listener: WsjtxListener | None = None
         self.clock_monitor: ClockMonitor | None = None
         self.disk_monitor: DiskMonitor | None = None
+        self.upload_service: UploadService | None = None
+        self._uploader_factory = uploader_factory or self._default_uploader
         self._ntp_probe = ntp_probe
         self.recovered: list[Recovery] = []
 
@@ -94,6 +104,19 @@ class Recorder:
         if audio.file is not None:
             return FileBackend(audio.file, speed=audio.file_speed, loop=audio.file_loop)
         return SoundDeviceBackend()
+
+    def _default_uploader(self) -> Uploader:
+        cfg = self.config
+        return Uploader(
+            SessionStorage(cfg.storage_root),
+            HfHub(),
+            TokenStore(),
+            ConsentStore(config_dir() / "consent.json"),
+            self.clock,
+            repo_id=cfg.upload.repo,
+            require_decoder=cfg.upload.require_decoder,
+            max_bytes_per_s=cfg.upload.max_bytes_per_s,
+        )
 
     def _native_rate(self, device: DeviceInfo) -> int:
         """The device's true rate (asking the sound server on Linux)."""
@@ -183,6 +206,18 @@ class Recorder:
             buffer_seconds=cfg.audio.buffer_seconds,
             timeline=timeline,
         )
+        if cfg.upload.schedule != "manual" or cfg.max_gb or cfg.delete_after_days:
+            self.upload_service = UploadService(
+                self._uploader_factory(),
+                bus,
+                self.clock,
+                schedule=cfg.upload.schedule,
+                window=Window.parse(cfg.upload.overnight_window),
+                max_bytes=int(cfg.max_gb * 1e9) or None,
+                delete_after_days=cfg.delete_after_days or None,
+            )
+            self.upload_service.start()
+
         self.capture.start()
         self.stream = opened.stream
         self.stream.start()
@@ -192,6 +227,8 @@ class Recorder:
     def stop(self, reason: str = "stopped") -> RunSummary:
         assert self.manager is not None and self.capture is not None and self.bus is not None
         assert self.manager.session is not None
+        if self.upload_service is not None:
+            self.upload_service.stop()
         if self.stream is not None:
             self.stream.stop()
             self.stream.close()
