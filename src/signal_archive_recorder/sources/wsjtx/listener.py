@@ -41,6 +41,11 @@ NS_PER_MS = 1_000_000
 DAY_MS = 86_400_000
 HOUR_MS = 3_600_000
 DEFAULT_PORT = 2237
+SETUP_HELP = """\
+In WSJT-X: File > Settings > Reporting > UDP Server: 127.0.0.1, port 2237.
+  If GridTracker or JTAlert already uses that port, set a multicast address such as
+  224.0.0.1 in WSJT-X, and the same address as [wsjtx] group in the recorder's config:
+  every program that joins the group then gets WSJT-X's messages."""
 
 
 @dataclass

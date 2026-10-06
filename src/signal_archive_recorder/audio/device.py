@@ -89,14 +89,18 @@ def open_input(
     channels: int | None = None,
     sample_rate: int | None = None,
     blocksize: int = 0,
+    native_rate: int | None = None,
 ) -> OpenedInput:
     """Open a device for recording, preferring its own rate to avoid OS resampling.
 
-    Returns the stream, the delivered format (always the one to record in metadata)
-    and any warnings for the operator.
+    `native_rate` is the rate nothing resamples at, when it's known better than the
+    device reports it (Linux sound servers; see audio/sound_server.py). Returns the
+    stream, the delivered format (always the one to record in metadata) and any
+    warnings for the operator.
     """
+    native = native_rate or device.default_sample_rate
     requested = AudioFormat(
-        sample_rate=sample_rate or device.default_sample_rate,
+        sample_rate=sample_rate or native,
         channels=channels or min(device.max_input_channels, 2),
         sample_format=sample_format,
     )
@@ -115,10 +119,8 @@ def open_input(
 
     delivered = stream.format
     warnings: list[CaptureWarning] = []
-    if requested.sample_rate != device.default_sample_rate:
-        warnings.append(
-            _resampling_warning(device, requested.sample_rate, device.default_sample_rate)
-        )
+    if requested.sample_rate != native:
+        warnings.append(_resampling_warning(device, requested.sample_rate, native))
     if delivered.sample_rate != requested.sample_rate:
         warnings.append(
             CaptureWarning(

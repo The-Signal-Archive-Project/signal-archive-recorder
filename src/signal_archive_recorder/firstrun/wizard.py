@@ -29,12 +29,14 @@ from signal_archive_recorder.audio.device import (
     open_input,
 )
 from signal_archive_recorder.audio.levels import LevelMeter
+from signal_archive_recorder.audio.sound_server import native_rate
 from signal_archive_recorder.clockmon.monitor import NtpProbe, status_for
 from signal_archive_recorder.core.clock import Clock, SystemClock
 from signal_archive_recorder.firstrun.config_writer import SetupChoices, write
 from signal_archive_recorder.firstrun.devices import LINUX_TIP, rank
 from signal_archive_recorder.metadata.settings import normalise_callsign, normalise_grid
 from signal_archive_recorder.sources.wsjtx import messages as m
+from signal_archive_recorder.sources.wsjtx.listener import SETUP_HELP
 from signal_archive_recorder.upload.consent import CONSENT_TEXT, ConsentStore
 from signal_archive_recorder.upload.hub import DEFAULT_REPO, Hub, HubError, check_token
 from signal_archive_recorder.upload.token import KeyringUnavailableError, Token, TokenStore
@@ -48,10 +50,7 @@ To upload, the recorder needs a Hugging Face access token. To make one:
   4. Copy the token (it starts with hf_) and paste it below.
 The token is kept in your system's keyring, never in a file.
 """
-WSJTX_HELP = """\
-In WSJT-X: File > Settings > Reporting > UDP Server: 127.0.0.1, port 2237.
-  If GridTracker or JTAlert already uses that port, set a multicast address such as
-  224.0.0.1 in WSJT-X, and the same address as [wsjtx] group in the recorder's config."""
+WSJTX_HELP = SETUP_HELP
 
 
 class SetupCancelled(Exception):
@@ -118,7 +117,7 @@ def measure_levels(backend: AudioBackend, device: DeviceInfo, seconds: float = 3
         meters["m"].update(bytes(data))
         frames["n"] += n
 
-    opened = open_input(backend, device, on_audio)
+    opened = open_input(backend, device, on_audio, native_rate=native_rate(device))
     meters["m"] = LevelMeter(opened.delivered)
     opened.stream.start()
     try:
@@ -275,7 +274,7 @@ class Wizard:
                 p.say("  Other inputs:")
             why = f"  ({'; '.join(c.reasons)})" if c.reasons else ""
             d = c.device
-            p.say(f"   {i:2d}. {d.name}  [{d.host_api}, {d.default_sample_rate} Hz]{why}")
+            p.say(f"   {i:2d}. {d.name}  [{d.host_api}, {native_rate(d)} Hz]{why}")
         if self.system == "Linux":
             p.say(f"  {LINUX_TIP}")
         while True:
