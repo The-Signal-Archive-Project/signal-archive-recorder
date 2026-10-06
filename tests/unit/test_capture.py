@@ -138,7 +138,8 @@ def test_overrun_annotated() -> None:
     assert gap.lost_frames == stats.lost_frames > 0
     assert stats.written_frames + stats.lost_frames == stats.delivered_frames
     assert stats.delivered_frames == len(data) // fmt.frame_bytes
-    assert gap.est_t_ns == START_NS + fmt.frames_to_ns(gap.stream_frame)
+    assert gap.est_t_ns == capture.timeline.frame_to_ns(gap.stream_frame)
+    assert capture.timeline.frame_to_ns(0) == START_NS - fmt.frames_to_ns(480)  # first block
 
     # The written audio is exactly the input with the gap cut out...
     fb = fmt.frame_bytes

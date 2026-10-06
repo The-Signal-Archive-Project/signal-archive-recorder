@@ -202,19 +202,27 @@ Exit tests:
 ### Stage 5: Session manager and chunker
 
 Build:
-- `manager.py`, which owns the timeline: subscribes to the bus and holds per-chunk event windows
-- `chunker.py`, which applies the chunk policy and splits on mode or frequency change
-- TX interval tracking
-- `storage.py` session folder layout: `sessions/<session_id>/{session.json, <chunk_id>.flac, <chunk_id>.meta.json, *_decodes.jsonl}`
+- `audio/timeline.py` `StreamTimeline`: the audio stream is the session clock. The first callback anchors frame 0 (minus one block). A driver overflow re-anchors, because an unknown amount of audio was lost. Wall-clock sync points are taken about once a second for drift estimation, and the app never corrects drift. All maths is integer.
+- `session/manager.py` `SessionManager`, which is both a capture sink and a bus subscriber:
+  - Every event is placed at a stream frame, and audio is held back 2 s before it's committed, so changes split chunks at the exact frame. Later events are applied where they're noticed and flagged `late`.
+  - A chunk ends at the first of: the policy boundary (from the mode and reported period at its start), a dial change, a mode change, or the session end. Simultaneous changes give a combined reason (`freq_change+mode_change`), and repeating the same value doesn't split.
+  - Values are known only while their source is up. Otherwise they're `null` with reason `source_unavailable` (or `not_reported`).
+  - Each chunk records: TX intervals (split across chunks), source down intervals, gaps, levels, live vs off-air decode counts, its events, sync points, and its first-sample time and actual sample count.
+  - FLAC finalisation (verify, then write `meta.json`) runs on a separate thread.
+- `session/storage.py`: `sessions/<UTC start id>/{session.json, NNNN_<UTC>.flac, NNNN_<UTC>.meta.json, <source>_decodes.jsonl}`, with JSON written atomically.
+- `sources/base.py` `SupervisedSource`: runs a source loop on its own thread, publishes `SourceDown("crashed: …")` on an exception, and restarts with exponential backoff.
+- `meta.json` and `session.json` are preliminary here. Stage 6 defines their schemas and privacy filtering.
 
-Exit tests (all with FakeClock + FakeAudioDevice + fake emitter):
-- `test_first_chunk_aligned`: starting at 12:03:07 gives a short first chunk ending at 12:05:00, then full 5-minute chunks.
-- `test_first_sample_utc_exact`: each chunk's recorded first-sample time equals the session start plus the cumulative sample count divided by the rate (±1 sample).
-- `test_split_on_freq_change` and `test_split_on_mode_change`: chunks split at the event timestamp, the concatenated samples equal the original stream, and no sample is duplicated or lost.
-- `test_mode_change_changes_policy`: switching FT8 → WSPR mid-session moves later boundaries to even-minute 6-minute chunks.
-- `test_tx_intervals`: TX on/off events show up as intervals in the right chunk(s), and audio keeps recording through TX.
-- `test_source_crash_isolated`: a source that raises in a loop still leaves complete, verified audio chunks, and the metadata shows `source_unavailable` for the affected window.
-- `test_sample_count_for_drift`: each chunk stores its actual sample count, and the app never corrects drift.
+Exit tests (fake clock advancing with a fake sound card; 8 kHz mono keeps 12-minute sessions fast):
+- `test_first_chunk_aligned`: 12:03:07 start gives a 12:05:00 first boundary, then 5-minute chunks.
+- `test_first_sample_utc_exact` (±1 sample).
+- `test_split_on_freq_change`, `test_split_on_mode_change` and `test_same_value_again_does_not_split`: split frames are exact, and the decoded chunks concatenate to the original stream byte for byte.
+- `test_mode_change_changes_policy` (FT8 → WSPR gives 6-minute chunks on even minutes) and `test_reported_period_drives_policy` (Q65-120).
+- `test_tx_intervals`, including one spanning a boundary.
+- `test_source_crash_isolated`: a supervised source that crashes in a loop. Audio is complete and verified, the outage is recorded, and later chunks have `source_unavailable`.
+- `test_sample_count_for_drift`: with a 100 ppm fast sound card, chunks hold nominal sample counts and the sync points show the drift.
+- `test_captured_wsjtx_traffic_drives_chunks`: the real listener replaying captured WSJT-X datagrams steers the chunks.
+- `test_gap_spanning_boundary_keeps_schedule`, `test_late_event_flagged`, `test_decode_counts_split_live_and_off_air` and `test_session_json_and_files`.
 
 ### Stage 6: Metadata generation, schemas and privacy
 

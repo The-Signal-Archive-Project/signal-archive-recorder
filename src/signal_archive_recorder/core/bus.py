@@ -35,6 +35,8 @@ class EventBus:
         self._closed = False
         self._queue: queue.SimpleQueue[Stamped | object] = queue.SimpleQueue()
         self._subscribers: list[Subscriber] = []
+        self._delivered = -1
+        self._idle = threading.Condition()
         self._subs_lock = threading.Lock()
         self._dispatcher = threading.Thread(target=self._run, name="event-bus", daemon=True)
         self._dispatcher.start()
@@ -79,3 +81,13 @@ class EventBus:
                     subscriber(item)
                 except Exception:
                     log.exception("event subscriber %r failed on %r", subscriber, item)
+            with self._idle:
+                self._delivered = item.seq
+                self._idle.notify_all()
+
+    def wait_idle(self, timeout: float = 5.0) -> bool:
+        """Wait until every event published so far has been delivered."""
+        with self._lock:
+            target = self._seq - 1
+        with self._idle:
+            return self._idle.wait_for(lambda: self._delivered >= target, timeout)
