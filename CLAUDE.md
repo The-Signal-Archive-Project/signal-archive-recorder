@@ -439,6 +439,16 @@ Before adding modes, FT8 through WSJT-X has to work on many stations: different 
 - Slow work runs off the UI thread through `ui/worker.py` `in_background`, whose results are dropped if the window that asked has been closed.
 - Tests: `tests/unit/test_hardening_h1.py`, including the setup window end to end with fakes and a real desktop-app subprocess that records from a WAV and saves its session on SIGTERM.
 
+**H1b: update notice and stereo channels (done)**
+- `updates.py`: GitHub releases API, PEP 440 comparison (`packaging`). Prereleases are offered only to prerelease installs. The check runs at start plus every 24 h, is announced once per version, and survives failures. It appears in the window banner, as a tray message, as a `record` line, and via `check-update`. `[updates] check`.
+- `audio/channels.py`: setup's `measure_levels` analyses stereo (exact copy, correlation, levels) and `recommend` gives `left`/`right`/`both` with a reason. `[audio] keep_channel`. The device is still opened in stereo; `ChannelPicker` (a capture sink on the writer thread) passes the kept channel's bytes on and re-checks the dropped one every 10 s, warning (`dropped_channel_active`) after 3 distinct checks. Never ask the OS for mono: it may average the channels. Real check: the dev laptop's mic array is two different mics (correlation 0.95), so both are kept, which is correct.
+- Tests: `tests/unit/test_hardening_h1b.py`.
+
+**Owner decisions for H2–H4 (2026-10-06):**
+- Tester support: a **groups.io** group as the testers' home (owner to create), GitHub Issues for confirmed bugs, and a tray "Report a problem…" item that saves diagnostics and shows both routes.
+- **Uninstall:** "keep everything" by default; an optional **Remove everything** (recordings including un-uploaded ones, settings, logs) behind a mandatory warning and a second confirmation; a **Remove my Hugging Face token** checkbox, ticked automatically by "remove everything" but also available on its own. The deleting is done by the app's own `signal-archive-recorder forget` command, which knows the configured folders and the keyring.
+- The intake validator bot ships with H4.
+
 **H2: Windows installer.** PyInstaller (one folder) plus Inno Setup: a per-user install with no admin rights, a Start-menu entry, start at login, and an uninstaller. Built by GitHub Actions on version tags. CI smoke-tests the installed app against the fake WSJT-X emitter.
 
 **H3: Linux packages.**

@@ -60,6 +60,7 @@ from signal_archive_recorder.recorder import RunSummary
 from signal_archive_recorder.session.cleanup import cleanup
 from signal_archive_recorder.session.storage import SessionDir, SessionStorage
 from signal_archive_recorder.station import Station
+from signal_archive_recorder.updates import Release, UpdateChecker, fetch_releases, newest
 from signal_archive_recorder.upload.consent import CONSENT_TEXT, ConsentStore, NoConsentError
 from signal_archive_recorder.upload.hub import DEFAULT_REPO, HfHub, Hub, HubError, check_token
 from signal_archive_recorder.upload.queue import (
@@ -78,6 +79,8 @@ log = logging.getLogger("signal_archive_recorder")
 make_hub: Callable[[], Hub] = HfHub
 make_token_store: Callable[[], TokenStore] = TokenStore
 make_clock: Callable[[], Clock] = SystemClock
+make_update_checker: Callable[[Callable[[Release], None]], UpdateChecker] = UpdateChecker
+fetch_update_list: Callable[[], list[dict[str, object]]] = fetch_releases
 
 EXIT_CONFIG, EXIT_DEVICE, EXIT_LOGIN, EXIT_CONSENT, EXIT_UPLOAD = 2, 3, 4, 5, 6
 
@@ -208,8 +211,18 @@ def cmd_record(args: argparse.Namespace) -> int:
             "(Ctrl-C to quit).",
             flush=True,
         )
+    updates = None
+    if config.check_updates:
+
+        def tell(release: Release) -> None:
+            print(f"Version {release.label} is available: {release.url}", flush=True)
+
+        updates = make_update_checker(tell)
+        updates.start()
     while not stop.wait(0.5):
         pass
+    if updates is not None:
+        updates.stop()
     station.stop(reason="signal")
     return 0
 
@@ -339,6 +352,19 @@ def cmd_devices(args: argparse.Namespace) -> int:
         return EXIT_DEVICE
     if text:
         print(text)
+    return 0
+
+
+def cmd_check_update(args: argparse.Namespace) -> int:
+    try:
+        release = newest(fetch_update_list())
+    except Exception as exc:
+        print(f"Couldn't check for updates: {exc}", file=sys.stderr)
+        return 1
+    if release is None:
+        print(f"Signal Archive Recorder {__version__} is the newest version.")
+    else:
+        print(f"Version {release.label} is available (you have {__version__}): {release.url}")
     return 0
 
 
@@ -598,6 +624,7 @@ def build_parser() -> argparse.ArgumentParser:
     p = add("requeue", cmd_requeue, "let a blocked, failed or missing session upload again")
     p.add_argument("session")
     add("status", cmd_status, "follow up open pull requests")
+    add("check-update", cmd_check_update, "see whether a newer version is out (asks GitHub)")
     p = add("diagnostics", cmd_diagnostics, "save a diagnostics zip to attach to a bug report")
     p.add_argument("--out", type=Path, default=Path("signal-archive-diagnostics.zip"))
     return parser

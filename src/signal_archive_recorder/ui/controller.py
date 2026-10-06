@@ -35,6 +35,7 @@ from signal_archive_recorder.recorder import Recorder
 from signal_archive_recorder.session.storage import SessionStorage
 from signal_archive_recorder.station import Station
 from signal_archive_recorder.ui.health import DiskState, HealthInputs, WsjtxState
+from signal_archive_recorder.updates import Release, UpdateChecker
 from signal_archive_recorder.upload.queue import UploadRecord, describe_result
 from signal_archive_recorder.upload.review import ReviewError, format_review, review
 from signal_archive_recorder.upload.screening import format_screens, screen_session
@@ -45,9 +46,18 @@ StationFactory = Callable[[RecorderConfig], Station]
 
 
 class RecorderController:
-    def __init__(self, config: RecorderConfig, factory: StationFactory = Station) -> None:
+    def __init__(
+        self,
+        config: RecorderConfig,
+        factory: StationFactory = Station,
+        update_factory: Callable[[Callable[[Release], None]], UpdateChecker] = UpdateChecker,
+    ) -> None:
         self.config = config
         self._factory = factory
+        self._update_factory = update_factory
+        self._updates: UpdateChecker | None = None
+        self.update: Release | None = None  # a newer version, once one is found
+        self.on_update: Callable[[Release], None] | None = None  # called off the UI thread
         self.station: Station | None = None
         self.paused = False
         self.notes: list[str] = []
@@ -70,8 +80,19 @@ class RecorderController:
             station = self._factory(self.config)
             station.start(subscribers=[self._on_event])
             self.station, self.paused = station, False
+            if self.config.check_updates and self._updates is None:
+                self._updates = self._update_factory(self._new_release)
+                self._updates.start()
+
+    def _new_release(self, release: Release) -> None:
+        self.update = release
+        if self.on_update is not None:
+            self.on_update(release)
 
     def stop(self, reason: str = "stopped") -> None:
+        if self._updates is not None:
+            self._updates.stop()
+            self._updates = None
         with self._lock:
             station, self.station = self.station, None
         if station is not None:
@@ -119,6 +140,8 @@ class RecorderController:
                 h.disk = disk.get(e.code, "ok")
             elif e.code == "wsjtx_port_busy":
                 h.wsjtx = "busy"
+            elif e.code == "dropped_channel_active":
+                h.audio_note = e.message
 
     def snapshot(self) -> HealthInputs:
         h = replace(self._health)

@@ -285,11 +285,17 @@ class MetadataBuilder:
         mode = rec["mode"]
         if mode["value"] is None:
             reason = mode.get("reason") or NOT_REPORTED
-            return {"count": known(None, reason), "off_air_count": off_air,
-                    "median_dt_s": known(None, reason)}  # fmt: skip
+            return {
+                "count": known(None, reason),
+                "off_air_count": off_air,
+                "median_dt_s": known(None, reason),
+            }
         if not self.registry.get(mode["value"]).timing.slotted:
-            return {"count": known(None, NOT_APPLICABLE), "off_air_count": off_air,
-                    "median_dt_s": known(None, NOT_APPLICABLE)}  # fmt: skip
+            return {
+                "count": known(None, NOT_APPLICABLE),
+                "off_air_count": off_air,
+                "median_dt_s": known(None, NOT_APPLICABLE),
+            }
         dts = [d for d in decodes.get("live_dt_s", []) if d is not None]
         median = _round(statistics.median(dts), 3) if dts else None
         return {
@@ -359,6 +365,17 @@ class MetadataBuilder:
 
     # -- sessions ----------------------------------------------------------------
 
+    @staticmethod
+    def _channel_selection(selection: dict[str, Any] | None) -> dict[str, Any]:
+        if not selection:
+            return {}
+        return {
+            "channel_selection": {
+                "device_channels": int(selection["device_channels"]),
+                "kept": str(selection["kept"]),
+            }
+        }
+
     def session(self, info: dict[str, Any]) -> dict[str, Any]:
         s = self.settings
         if s.callsign and s.share_callsign:
@@ -398,6 +415,7 @@ class MetadataBuilder:
                 "sample_rate": info["audio"]["sample_rate"],
                 "channels": info["audio"]["channels"],
                 "bit_depth": {"int16": 16, "int24": 24}[info["audio"]["sample_format"]],
+                **self._channel_selection(info["audio"].get("channel_selection")),
             },
             "clock": self._session_clock(info.get("clock_checks", [])),
             "software": {self._text(k): self._text(v) for k, v in info["software"].items()},
@@ -428,9 +446,18 @@ class MetadataBuilder:
         text, redacted = self.redactor.text(self.scrub.text(line.get("text", "")))
         out = {
             key: line.get(key)
-            for key in ("received_ns", "source", "mode_id", "decoder_time_ns", "snr_db", "dt_s",
-                        "df_hz", "low_confidence", "off_air")
-        }  # fmt: skip
+            for key in (
+                "received_ns",
+                "source",
+                "mode_id",
+                "decoder_time_ns",
+                "snr_db",
+                "dt_s",
+                "df_hz",
+                "low_confidence",
+                "off_air",
+            )
+        }
         out["text"] = text
         if redacted:
             out["redacted"] = True

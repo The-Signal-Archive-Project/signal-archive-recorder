@@ -30,6 +30,7 @@ class HealthInputs:
     standby: bool = False  # waiting for WSJT-X, ready to record
     paused: bool = False
     problem: str | None = None  # why recording couldn't start (e.g. the sound card)
+    audio_note: str | None = None  # e.g. a dropped stereo channel came to life
     peak_dbfs: float | None = None  # None: no audio yet
     clipped: int = 0
     frames_lost: int = 0
@@ -71,6 +72,8 @@ def checklist(h: HealthInputs) -> list[CheckItem]:
         )
     elif h.clipped:
         items.append(CheckItem("Audio", "warn", "clipping: turn the radio's audio level down"))
+    elif h.audio_note:
+        items.append(CheckItem("Audio", "warn", h.audio_note))
     elif h.frames_lost:
         items.append(CheckItem("Audio", "warn", f"{h.frames_lost} samples lost (disk too slow?)"))
     else:

@@ -22,6 +22,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
 
+from signal_archive_recorder.audio.channels import (
+    KEEP_CHOICES,
+    ChannelAnalysis,
+    Keep,
+    Recommendation,
+    analyse,
+    recommend,
+)
 from signal_archive_recorder.audio.device import (
     AudioBackend,
     DeviceInfo,
@@ -96,6 +104,11 @@ class LevelReport:
     rms_dbfs: float
     clipped: int
     seconds: float
+    channels: ChannelAnalysis | None = None  # stereo inputs: which channels carry audio
+
+    @property
+    def recommendation(self) -> Recommendation | None:
+        return recommend(self.channels) if self.channels and self.channels.channels == 2 else None
 
     @property
     def verdict(self) -> str:
@@ -112,9 +125,12 @@ def measure_levels(backend: AudioBackend, device: DeviceInfo, seconds: float = 3
     """Listen to an input briefly, in shared mode like a real recording."""
     meters: dict[str, LevelMeter] = {}
     frames = {"n": 0}
+    raw: list[bytes] = []
 
     def on_audio(data: memoryview, n: int, overflow: bool) -> None:
-        meters["m"].update(bytes(data))
+        block = bytes(data)
+        meters["m"].update(block)
+        raw.append(block)
         frames["n"] += n
 
     opened = open_input(backend, device, on_audio, native_rate=native_rate(device))
@@ -126,8 +142,14 @@ def measure_levels(backend: AudioBackend, device: DeviceInfo, seconds: float = 3
         opened.stream.stop()
         opened.stream.close()
     snap = meters["m"].snapshot()
-    return LevelReport(max(snap.peak_dbfs), max(snap.rms_dbfs), sum(snap.clipped),
-                       frames["n"] / opened.delivered.sample_rate)  # fmt: skip
+    channels = analyse(b"".join(raw), opened.delivered)
+    return LevelReport(
+        max(snap.peak_dbfs),
+        max(snap.rms_dbfs),
+        sum(snap.clipped),
+        frames["n"] / opened.delivered.sample_rate,
+        channels,
+    )
 
 
 def listen_for_wsjtx(
@@ -182,13 +204,14 @@ class Wizard:
         p.say()
         self.step_consent()
         self.step_login()
-        device, rate = self.step_audio()
+        device, rate, keep = self.step_audio()
         station = self.step_station()
         self.step_wsjtx()
         self.step_clock()
         choices = SetupChoices(
             device=device.name,
             sample_rate=rate,
+            keep_channel=keep,
             callsign=station.callsign,
             share_callsign=station.share_callsign,
             grid=station.grid,
@@ -253,7 +276,7 @@ class Wizard:
             p.say()
             return
 
-    def step_audio(self) -> tuple[DeviceInfo, int | None]:
+    def step_audio(self) -> tuple[DeviceInfo, int | None, Keep]:
         p = self.prompt
         p.say("Step 3 of 6: audio input (the radio's receive audio)")
         try:
@@ -293,8 +316,21 @@ class Wizard:
             peak = "silence" if math.isinf(report.peak_dbfs) else f"{report.peak_dbfs:.1f} dBFS"
             p.say(f"  Peak level {peak}: {report.verdict}.")
             if report.verdict == "good" or yes(p.ask("Use this input anyway? (y/n)", "y")):
+                keep = self._ask_channels(report)
                 p.say()
-                return device, None
+                return device, None, keep
+
+    def _ask_channels(self, report: LevelReport) -> Keep:
+        rec = report.recommendation
+        if rec is None:
+            return "both"
+        p = self.prompt
+        p.say(f"  Stereo input. {rec.explanation}")
+        while True:
+            answer = p.ask("Record which channels? (left/right/both)", rec.keep).strip().lower()
+            if answer in KEEP_CHOICES:
+                return answer
+            p.say("  Please answer left, right or both.")
 
     def step_station(self) -> Station:
         p = self.prompt

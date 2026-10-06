@@ -23,6 +23,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from signal_archive_recorder.audio.capture import Capture, CaptureStats
+from signal_archive_recorder.audio.channels import ChannelPicker, Keep, kept_format
 from signal_archive_recorder.audio.device import (
     AudioBackend,
     DeviceInfo,
@@ -169,7 +170,14 @@ class Recorder:
             sample_rate=cfg.audio.sample_rate,
             native_rate=self._native_rate(device),
         )
-        fmt = opened.delivered
+        device_fmt = opened.delivered
+        keep: Keep = cfg.audio.keep_channel
+        if keep != "both" and device_fmt.channels != 2:
+            log.info(
+                "keep_channel = %s ignored: the input has %d channel(s)", keep, device_fmt.channels
+            )
+            keep = "both"
+        fmt = kept_format(device_fmt, keep)
         timeline = StreamTimeline(fmt.sample_rate)
         self.manager = SessionManager(
             storage=storage,
@@ -180,6 +188,7 @@ class Recorder:
             timeline=timeline,
             target_chunk_s=cfg.target_chunk_s,
             builder=builder,
+            channel_selection={"device_channels": 2, "kept": keep} if keep != "both" else None,
         )
         session = self.manager.start()
         for warning in opened.warnings:
@@ -225,11 +234,21 @@ class Recorder:
                 bus.publish(CaptureWarning(source="wsjtx", code="wsjtx_port_busy", message=message))
 
         self.live_level = LiveLevel(fmt)
+        sinks: list[Any] = [self.manager, self.live_level]
+        if keep != "both":
+
+            def distinct(message: str) -> None:
+                log.warning("%s", message)
+                bus.publish(
+                    CaptureWarning(source="audio", code="dropped_channel_active", message=message)
+                )
+
+            sinks = [ChannelPicker(device_fmt, keep, sinks, on_distinct=distinct)]
         self.capture = holder["capture"] = Capture(
-            fmt,
+            device_fmt,
             bus=bus,
             clock=self.clock,
-            sinks=[self.manager, self.live_level],
+            sinks=sinks,
             buffer_seconds=cfg.audio.buffer_seconds,
             timeline=timeline,
         )
