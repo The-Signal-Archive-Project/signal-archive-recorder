@@ -15,6 +15,18 @@ FT8 comes first. Other digital modes (FT4, WSPR, JS8, Q65, PSK31, RTTY and more)
 
 ## Install
 
+### Windows (installer)
+
+Download `SignalArchiveRecorder-<version>-Setup.exe` from the [latest release](https://github.com/The-Signal-Archive-Project/signal-archive-recorder/releases) and run it. It installs for your user only (no administrator rights needed), adds a Start-menu entry and, if you leave the box ticked, starts with Windows. On first start a setup window walks you through everything; after that the recorder lives in the system tray (lower right) and only records while WSJT-X is running.
+
+- **"Windows protected your PC"?** The beta installer isn't code-signed yet. Click **More info**, then **Run anyway**. Signing comes before 1.0.
+- **Antivirus warnings:** some antivirus tools are wary of new, unsigned programs. If yours blocks it, please tell us (with the antivirus name) so we can report the false positive.
+- **Uninstalling** (Settings, Apps) keeps your recordings, settings and Hugging Face login by default. It offers to remove your token, or everything (with a clear warning, since that includes recordings not yet uploaded).
+
+The command line is installed too, as `signal-archive-recorder.exe` in the program folder (`%LOCALAPPDATA%\Programs\Signal Archive Recorder`).
+
+### With pipx (Linux, macOS, or Windows from source)
+
 You need **Python 3.11 or newer**. The recorder installs straight from this repository; [pipx](https://pipx.pypa.io/) keeps it in its own environment:
 
 ```bash

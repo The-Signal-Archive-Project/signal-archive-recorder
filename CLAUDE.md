@@ -449,7 +449,17 @@ Before adding modes, FT8 through WSJT-X has to work on many stations: different 
 - **Uninstall:** "keep everything" by default; an optional **Remove everything** (recordings including un-uploaded ones, settings, logs) behind a mandatory warning and a second confirmation; a **Remove my Hugging Face token** checkbox, ticked automatically by "remove everything" but also available on its own. The deleting is done by the app's own `signal-archive-recorder forget` command, which knows the configured folders and the keyring.
 - The intake validator bot ships with H4.
 
-**H2: Windows installer.** PyInstaller (one folder) plus Inno Setup: a per-user install with no admin rights, a Start-menu entry, start at login, and an uninstaller. Built by GitHub Actions on version tags. CI smoke-tests the installed app against the fake WSJT-X emitter.
+**H2: Windows installer (done)**
+- `installer/windows/`:
+  - `signal-archive-recorder.spec`: PyInstaller, one folder (not one file, so the LGPL DLLs stay replaceable, it starts faster and antivirus tools trust it more). Two programs share it: `SignalArchiveRecorder.exe` (windowed; no arguments starts the tray) and `signal-archive-recorder.exe` (console, the CLI).
+  - `signal-archive-recorder.iss`: Inno Setup 6. A per-user install (`PrivilegesRequired=lowest`), a fixed `AppId` (never change it: upgrades depend on it), the Start menu, start-at-login and desktop tasks, and `AppMutex` matching `ui/app.py` `WINDOWS_MUTEX`. The uninstall dialog shows the owner's options and calls `forget`.
+  - `build.py`: version resource, PyInstaller, license collection (every bundled distribution's license files, under `licenses/`), then ISCC.
+  - `smoke_test.py`: install silently, check the packaged app (version, keyring backend `WinVaultKeyring`, PySide6, PortAudio/libsndfile), record a session in standby driven by the fake emitter, run the desktop app offscreen plus a second start, `forget --dry-run`, a silent uninstall that keeps the recordings.
+- `.github/workflows/windows-installer.yml`: runs on PRs touching `src/`, `installer/` or `pyproject.toml`, on published releases (attaching the installer) and by hand. It isn't a required check.
+- `.gitignore` re-includes the spec (the stock Python rule ignores `*.spec`).
+- `forget.py` / `signal-archive-recorder forget [--token] [--everything] [--dry-run] [--yes]`. It always turns off start at login. With `--everything` it deletes `<root>/sessions` (the root only if then empty), the app's config folder (never a `--config` file's folder) and logs, never a home folder or drive root.
+- The icon is drawn by `tools/make_icon.py` (Qt, offscreen) into `data/icon.png` and `installer/windows/icon.ico`.
+- Checked locally: the spec builds on Linux too, and the frozen CLI and desktop app run (package data, metadata, PortAudio, keyring, Qt offscreen; a session recorded and saved on SIGTERM). `tests/unit/test_installer.py` keeps names, mutex, registry value and `forget` options in step between the installer and the app.
 
 **H3: Linux packages.**
 - **AUR:** `signal-archive-recorder`, using Arch's packages (all in `extra` except `python-sounddevice` and `python-ntplib`, which come from the AUR).

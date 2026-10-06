@@ -53,6 +53,12 @@ def about() -> str:
         lines.append(f"pyside6 {PySide6.__version__}")
     except ImportError:
         lines.append("pyside6 not installed")
+    try:
+        import keyring
+
+        lines.append(f"keyring backend {type(keyring.get_keyring()).__name__}")
+    except Exception as exc:
+        lines.append(f"keyring unavailable: {type(exc).__name__}: {exc}")
     for name in ("sounddevice", "soundfile", "numpy", "huggingface_hub"):
         try:
             module = __import__(name)

@@ -63,3 +63,12 @@ def setup_logging(verbose: bool = False, *, to_file: bool = True) -> Path | None
     for handler in _installed:
         root.addHandler(handler)
     return path
+
+
+def stop_file_logging() -> None:
+    """Close the log file (before deleting the log folder, which Windows refuses while open)."""
+    root = logging.getLogger()
+    for handler in [h for h in _installed if isinstance(h, RotatingFileHandler)]:
+        root.removeHandler(handler)
+        handler.close()
+        _installed.remove(handler)

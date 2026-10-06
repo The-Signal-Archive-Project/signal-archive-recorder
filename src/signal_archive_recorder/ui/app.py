@@ -20,6 +20,7 @@ import getpass
 import hashlib
 import logging
 import signal
+import sys
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Protocol
@@ -369,6 +370,28 @@ class _Window(StatusWindow):
             super().closeEvent(event)
 
 
+WINDOWS_MUTEX = "SignalArchiveRecorderRunning"  # the installer's AppMutex: "close it first"
+
+
+def app_icon() -> QIcon:
+    from importlib.resources import files
+
+    data = files("signal_archive_recorder.data").joinpath("icon.png").read_bytes()
+    pixmap = QPixmap()
+    if not pixmap.loadFromData(data):
+        return QIcon(dot("green", 64))
+    return QIcon(pixmap)
+
+
+def _announce_running() -> object:
+    """On Windows, a named mutex lets the installer see the app is running."""
+    if sys.platform == "win32":
+        import ctypes
+
+        return ctypes.windll.kernel32.CreateMutexW(None, False, WINDOWS_MUTEX)
+    return None
+
+
 class QuitOnSignals:
     """Ctrl-C, SIGTERM (logout, `kill`, systemd) and Ctrl-Break end the app cleanly.
 
@@ -429,7 +452,7 @@ class SingleInstance:
 
     def _connection(self) -> None:
         while (conn := self.server.nextPendingConnection()) is not None:
-            conn.readyRead.connect(conn.readAll)
+            conn.readyRead.connect(lambda c=conn: c.readAll())
             conn.disconnected.connect(conn.deleteLater)
             self.on_show()
 
@@ -504,7 +527,8 @@ def main(
     app = QApplication.instance() or QApplication([])
     assert isinstance(app, QApplication)
     app.setApplicationName("Signal Archive Recorder")
-    app.setWindowIcon(QIcon(dot("green", 64)))
+    app.setWindowIcon(app_icon())
+    running = _announce_running()
     QuitOnSignals(app)  # also during setup
     instance = SingleInstance()
     if not instance.acquire():
@@ -534,3 +558,4 @@ def main(
         )
     finally:
         instance.release()
+        del running

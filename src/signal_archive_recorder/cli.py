@@ -163,8 +163,9 @@ def cmd_tray(args: argparse.Namespace) -> int:
         storage: Path | None = None
         with contextlib.suppress(Exception):  # broken settings are worth reporting too
             storage = load_config(path).storage_root / "sessions"
-        return build_diagnostics(out, config_path=path, logs=log_dir(), sessions=storage,
-                                 devices=devices_text)  # fmt: skip
+        return build_diagnostics(
+            out, config_path=path, logs=log_dir(), sessions=storage, devices=devices_text
+        )
 
     return gui_main(
         path,
@@ -373,8 +374,9 @@ def cmd_diagnostics(args: argparse.Namespace) -> int:
     storage: Path | None = None
     with contextlib.suppress(Exception):
         storage = load_config(path).storage_root / "sessions"
-    out = build_diagnostics(args.out, config_path=path, logs=log_dir(), sessions=storage,
-                            devices=devices_text)  # fmt: skip
+    out = build_diagnostics(
+        args.out, config_path=path, logs=log_dir(), sessions=storage, devices=devices_text
+    )
     print(f"Diagnostics saved to {out}")
     print("It holds no audio or token, and your names are redacted. Attach it to your report.")
     return 0
@@ -426,14 +428,43 @@ def cmd_logout(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_forget(args: argparse.Namespace) -> int:
+    """What uninstalling removes (the Windows uninstaller calls this)."""
+    from signal_archive_recorder.forget import apply, describe, plan
+    from signal_archive_recorder.ui.autostart import Autostart
+
+    p = plan(args.config, token=args.token, everything=args.everything)
+    print(describe(p))
+    if args.dry_run:
+        return 0
+    if not args.yes:
+        if not sys.stdin.isatty():
+            print("Add --yes to confirm (nothing was changed).", file=sys.stderr)
+            return EXIT_CONFIG
+        word = "delete" if p.everything else "yes"
+        if input(f'Type "{word}" to go ahead: ').strip().lower() != word:
+            print("Nothing was changed.")
+            return 0
+    try:
+        removed = apply(p, tokens=_tokens(), autostart=Autostart())
+    except KeyringUnavailableError as exc:
+        print(str(exc), file=sys.stderr)
+        return EXIT_LOGIN
+    print("Removed: " + (", ".join(removed) or "nothing"))
+    return 0
+
+
 def cmd_review(args: argparse.Namespace) -> int:
     config = _config(args.config)
     uploader = _uploader(config)
     if args.session:
         targets = [_session_dir(config, args.session)]
     else:
-        targets = [d for d, r in uploader.sessions()
-                   if r.state in (UploadState.QUEUED, UploadState.BLOCKED)]  # fmt: skip
+        targets = [
+            d
+            for d, r in uploader.sessions()
+            if r.state in (UploadState.QUEUED, UploadState.BLOCKED)
+        ]
     if not targets:
         print("Nothing waiting to upload.")
     registry = ModeRegistry.load_default()
@@ -468,8 +499,9 @@ def cmd_upload(args: argparse.Namespace) -> int:
         return _dry_run(config, uploader, args.sessions)
     try:
         if args.sessions:
-            results = [(d, uploader.upload(d))
-                       for d in (_session_dir(config, s) for s in args.sessions)]  # fmt: skip
+            results = [
+                (d, uploader.upload(d)) for d in (_session_dir(config, s) for s in args.sessions)
+            ]
         else:
             results = uploader.upload_all()
     except NoConsentError as exc:
@@ -624,6 +656,15 @@ def build_parser() -> argparse.ArgumentParser:
     p = add("requeue", cmd_requeue, "let a blocked, failed or missing session upload again")
     p.add_argument("session")
     add("status", cmd_status, "follow up open pull requests")
+    p = add("forget", cmd_forget, "what uninstalling removes: start-at-login, token, or all data")
+    p.add_argument("--token", action="store_true", help="also remove the Hugging Face token")
+    p.add_argument(
+        "--everything",
+        action="store_true",
+        help="also DELETE all recordings (even unsent ones), settings and logs",
+    )
+    p.add_argument("--dry-run", action="store_true", help="only show what would be removed")
+    p.add_argument("--yes", action="store_true", help="don't ask (for the uninstaller)")
     add("check-update", cmd_check_update, "see whether a newer version is out (asks GitHub)")
     p = add("diagnostics", cmd_diagnostics, "save a diagnostics zip to attach to a bug report")
     p.add_argument("--out", type=Path, default=Path("signal-archive-diagnostics.zip"))
