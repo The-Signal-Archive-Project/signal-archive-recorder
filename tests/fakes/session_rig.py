@@ -36,7 +36,14 @@ def frames(seconds: float) -> int:
 class Rig:
     """Fake sound card + capture + bus + session manager, all on one fake clock."""
 
-    def __init__(self, root: Path, start: str = "12:03:07", seconds: float = 720, **kw: Any):
+    def __init__(
+        self,
+        root: Path,
+        start: str = "12:03:07",
+        seconds: float = 720,
+        data: bytes | None = None,
+        **kw: Any,
+    ):
         self.clock = FakeClock(utc_ns(start))
         self.bus = EventBus(self.clock)
         self.timeline = StreamTimeline(FMT.sample_rate)
@@ -59,7 +66,7 @@ class Rig:
             buffer_seconds=seconds + 10,  # audio is pumped far faster than real time
         )
         self.capture.start()
-        self.data = noise(FMT, seconds, seed=1)
+        self.data = data if data is not None else noise(FMT, seconds, seed=1)
         self.rate_hz = float(FMT.sample_rate)  # the sound card's true rate, for drift tests
         self.device = FakeAudioDevice(FMT, self.data, self._callback, block_frames=(480, 97, 640))
 

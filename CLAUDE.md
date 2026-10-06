@@ -339,6 +339,19 @@ Exit tests (fake Hugging Face `tests/fakes/fake_hf.py`, which uses `huggingface_
 - `test_review_shows_what_is_shared`.
 - Manual: `login` with a real token, then the first real `upload` to `signal-archive-project/signal-archive-intake`.
 
+### Keeping non-radio audio out (radio-audio screening)
+
+The dataset must only contain receiver audio. Before every upload, `upload/screening.py` checks each chunk. Nothing here decodes; it only measures energy where a decoder already reported signals.
+
+1. **A decoder was running.** The chunk has a decoder-reported mode. Without one, the chunk is kept back, unless `[upload] require_decoder = false` (for future decoder-less modes).
+2. **The audio contains what the decoder heard.** For each live decode at −18 dB SNR or better, the energy in `[df, df + bandwidth]` over the middle 60% of the transmission (slot + `signal.start_s` + DT, lasting `signal.duration_s`, from `modes.json`) must be at least 1.5 dB above the median of the neighbouring 60–300 Hz. With 2 or more such decodes and fewer than half visible, the chunk is kept back.
+   - **Validated on real audio:** WSJT-X's FT8 sample showed 20 of 20 visible (all 21 decodes ≥ +1.9 dB). A live laptop microphone at the same positions showed 1 of 20. Pure noise stays within ±0.5 dB.
+3. **It sounds like a receiver.** The energy at 300–2700 Hz versus 4–12 kHz is a warning only below 20 dB (real FT8: 64.5 dB; laptop mic: 14.3 dB). An inconclusive check 2 combined with this warning keeps the chunk back.
+
+**What happens to failing chunks:** at upload, they move to `local/excluded/` with a `.why.txt` and are never sent. If every chunk fails, the session is `blocked` and nothing moves. `upload --dry-run` and `review` show the verdicts.
+
+**The real gate is server-side:** the future intake validator must repeat checks 2 and 3, because an app can be misconfigured or modified. Only modes with a `signal` entry in `modes.json` (FT8 and FT4 so far) get check 2. Add the entry when adding a slotted mode.
+
 ### Testing uploads against Hugging Face
 
 **Never test-upload to the production intake repo.** On 2026-10-06 a 20 s test of the laptop microphone was uploaded and merged into `signal-archive-intake`. The repo had to be deleted and recreated to remove it from git history.

@@ -88,6 +88,7 @@ class ClockConfig:
 @dataclass(frozen=True)
 class UploadConfig:
     repo: str = "signal-archive-project/signal-archive-intake"
+    require_decoder: bool = True
 
 
 @dataclass(frozen=True)
@@ -110,7 +111,7 @@ _SECTIONS = {
                 "station_profile_id"},
     "wsjtx": {"enabled", "port", "bind", "group"},
     "clock": {"enabled", "interval_s", "servers"},
-    "upload": {"repo"},
+    "upload": {"repo", "require_decoder"},
 }  # fmt: skip
 
 
@@ -164,7 +165,10 @@ def parse_config(data: dict[str, Any], base: Path = Path()) -> RecorderConfig:
                 bind=wsjtx.get("bind", "127.0.0.1"),
                 group=wsjtx.get("group") or None,
             ),
-            upload=UploadConfig(repo=data.get("upload", {}).get("repo", UploadConfig.repo)),
+            upload=UploadConfig(
+                repo=data.get("upload", {}).get("repo", UploadConfig.repo),
+                require_decoder=bool(data.get("upload", {}).get("require_decoder", True)),
+            ),
             clock=ClockConfig(
                 enabled=bool(clock.get("enabled", True)),
                 interval_s=float(clock.get("interval_s", 600)),

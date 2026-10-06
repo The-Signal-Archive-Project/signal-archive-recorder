@@ -28,10 +28,15 @@ from pathlib import Path
 from typing import Any
 
 from signal_archive_recorder.core.clock import Clock
+from signal_archive_recorder.metadata.builder import MetadataBuilder
+from signal_archive_recorder.metadata.settings import StationSettings
+from signal_archive_recorder.modes.registry import ModeRegistry
 from signal_archive_recorder.session.storage import SessionStorage, write_json_atomic
 from signal_archive_recorder.upload.consent import ConsentStore
 from signal_archive_recorder.upload.hub import DEFAULT_REPO, Hub, PrNotFoundError, check_token
-from signal_archive_recorder.upload.review import preflight, review, upload_files
+from signal_archive_recorder.upload.review import preflight, remove_chunk, review, upload_files
+from signal_archive_recorder.upload.screening import save as save_screening
+from signal_archive_recorder.upload.screening import screen_session
 from signal_archive_recorder.upload.token import Token, TokenStore, scrub_token
 from signal_archive_recorder.upload.validator import latest_verdict
 
@@ -63,6 +68,7 @@ class UploadRecord:
     path_in_repo: str | None = None
     problems: list[str] = field(default_factory=list)
     validator_messages: list[str] = field(default_factory=list)
+    excluded: list[dict[str, Any]] = field(default_factory=list)  # chunks screening kept back
     updated_ns: int = 0
 
     @classmethod
@@ -93,6 +99,8 @@ class DryRun:
     files: list[tuple[str, int]]
     problems: list[str]
     username: str | None
+    excluded: list[tuple[str, list[str]]] = field(default_factory=list)
+    warnings: list[tuple[str, list[str]]] = field(default_factory=list)
 
 
 def pr_title(path_in_repo: str) -> str:
@@ -109,8 +117,14 @@ class Uploader:
         clock: Clock,
         *,
         repo_id: str = DEFAULT_REPO,
+        registry: ModeRegistry | None = None,
+        builder: MetadataBuilder | None = None,
+        require_decoder: bool = True,
     ) -> None:
         self.storage = storage
+        self.registry = registry or ModeRegistry.load_default()
+        self.builder = builder or MetadataBuilder(self.registry, StationSettings())
+        self.require_decoder = require_decoder
         self.hub = hub
         self.tokens = tokens
         self.consent = consent
@@ -144,6 +158,19 @@ class Uploader:
             record.save(session_dir, self.clock.now_ns())
             return record
         record.problems = []
+
+        screens = screen_session(session_dir, self.registry, require_decoder=self.require_decoder)
+        save_screening(session_dir, screens)
+        excluded = [s for s in screens if not s.eligible]
+        if screens and len(excluded) == len(screens):
+            # Nothing here looks like radio audio: keep it all local and say why.
+            record.state = UploadState.BLOCKED
+            record.problems = [f"{s.chunk_id}: {'; '.join(s.reasons)}" for s in excluded]
+            record.save(session_dir, self.clock.now_ns())
+            return record
+        for s in excluded:
+            remove_chunk(session_dir, s.chunk_id, self.builder, into="excluded", why=s.reasons)
+            record.excluded.append({"chunk_id": s.chunk_id, "reasons": s.reasons})
 
         path_in_repo = f"contributions/{identity.username}/{session_dir.name}"
         title = pr_title(path_in_repo)
@@ -226,8 +253,6 @@ class Uploader:
                 f"{session_dir.name} is already uploaded ({record.state.value}); ask for removal "
                 "on the pull request instead"
             )
-        from signal_archive_recorder.upload.review import remove_chunk
-
         remove_chunk(session_dir, chunk_id, builder)
 
     def requeue(self, session_dir: Path) -> UploadRecord:
@@ -247,7 +272,16 @@ class Uploader:
         files = [(p.relative_to(session_dir).as_posix(), p.stat().st_size)
                  for p in upload_files(session_dir)]  # fmt: skip
         path = f"contributions/{username or '<your-hf-username>'}/{session_dir.name}"
-        return DryRun(self.repo_id, path, pr_title(path), files, preflight(session_dir), username)
+        screens = screen_session(session_dir, self.registry, require_decoder=self.require_decoder)
+        excluded = [(s.chunk_id, s.reasons) for s in screens if not s.eligible]
+        held = {chunk_id for chunk_id, _ in excluded}
+        files = [(n, size) for n, size in files if n.split("/")[-1].split(".")[0] not in held]
+        problems = preflight(session_dir)
+        if screens and len(excluded) == len(screens):
+            problems = problems + [f"{c}: {'; '.join(r)}" for c, r in excluded]
+        warnings = [(s.chunk_id, s.warnings) for s in screens if s.warnings and s.eligible]
+        return DryRun(self.repo_id, path, pr_title(path), files, problems, username,
+                      excluded, warnings)  # fmt: skip
 
     def upload_all(self) -> list[tuple[Path, UploadRecord]]:
         results = []

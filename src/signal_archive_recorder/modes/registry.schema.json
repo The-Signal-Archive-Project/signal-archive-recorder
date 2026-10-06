@@ -3,69 +3,172 @@
   "$id": "https://signal-archive-project.org/schemas/recorder/mode-registry/1",
   "title": "Signal Archive Recorder mode registry",
   "type": "object",
-  "required": ["registry_version", "modes"],
+  "required": [
+    "registry_version",
+    "modes"
+  ],
   "additionalProperties": false,
   "properties": {
-    "registry_version": { "type": "integer", "minimum": 1 },
+    "registry_version": {
+      "type": "integer",
+      "minimum": 1
+    },
     "modes": {
       "type": "array",
       "minItems": 1,
-      "items": { "$ref": "#/$defs/mode" }
+      "items": {
+        "$ref": "#/$defs/mode"
+      }
     }
   },
   "$defs": {
     "mode": {
       "type": "object",
-      "required": ["id", "display_name", "family", "timing", "nominal_bw_hz", "sideband", "aliases", "params_schema"],
+      "required": [
+        "id",
+        "display_name",
+        "family",
+        "timing",
+        "nominal_bw_hz",
+        "sideband",
+        "aliases",
+        "params_schema"
+      ],
       "additionalProperties": false,
       "properties": {
-        "id": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
-        "display_name": { "type": "string", "minLength": 1 },
-        "family": { "enum": ["wsjt", "js8", "psk", "fsk", "cw", "analog", "unknown"] },
-        "timing": { "$ref": "#/$defs/timing" },
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "display_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "family": {
+          "enum": [
+            "wsjt",
+            "js8",
+            "psk",
+            "fsk",
+            "cw",
+            "analog",
+            "unknown"
+          ]
+        },
+        "timing": {
+          "$ref": "#/$defs/timing"
+        },
         "nominal_bw_hz": {
           "description": "Typical occupied bandwidth; null when it depends on submode or speed.",
-          "type": ["number", "null"],
+          "type": [
+            "number",
+            "null"
+          ],
           "exclusiveMinimum": 0
         },
-        "sideband": { "enum": ["usb", "lsb", "none", null] },
+        "sideband": {
+          "enum": [
+            "usb",
+            "lsb",
+            "none",
+            null
+          ]
+        },
         "aliases": {
           "description": "Exact raw mode strings per decoder program that mean this mode. Rig-control sources (Hamlib, flrig) are not allowed: a rig setting such as PKTUSB or CW is recorded as a setting, never as evidence of the mode.",
           "type": "object",
-          "propertyNames": { "enum": ["wsjtx", "jtdx", "js8call", "fldigi"] },
+          "propertyNames": {
+            "enum": [
+              "wsjtx",
+              "jtdx",
+              "js8call",
+              "fldigi"
+            ]
+          },
           "additionalProperties": {
             "type": "array",
-            "items": { "type": "string", "minLength": 1 },
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
             "uniqueItems": true
           }
         },
-        "params_schema": { "type": ["string", "null"], "pattern": "^[a-z0-9_]+\\.schema\\.json$" },
-        "notes": { "type": "string" }
+        "params_schema": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[a-z0-9_]+\\.schema\\.json$"
+        },
+        "notes": {
+          "type": "string"
+        },
+        "signal": {
+          "description": "Where a transmission sits in its slot, for checking that recorded audio contains what a decoder reported: start after the slot edge and duration, both nominal.",
+          "type": "object",
+          "required": [
+            "start_s",
+            "duration_s"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "start_s": {
+              "type": "number",
+              "minimum": 0
+            },
+            "duration_s": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            }
+          }
+        }
       }
     },
     "timing": {
       "oneOf": [
         {
           "type": "object",
-          "required": ["kind", "period_s", "allowed_periods_s", "anchor"],
+          "required": [
+            "kind",
+            "period_s",
+            "allowed_periods_s",
+            "anchor"
+          ],
           "additionalProperties": false,
           "properties": {
-            "kind": { "const": "slotted" },
-            "period_s": { "type": "number", "exclusiveMinimum": 0 },
+            "kind": {
+              "const": "slotted"
+            },
+            "period_s": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
             "allowed_periods_s": {
               "type": "array",
               "minItems": 1,
               "uniqueItems": true,
-              "items": { "type": "number", "exclusiveMinimum": 0 }
+              "items": {
+                "type": "number",
+                "exclusiveMinimum": 0
+              }
             },
-            "anchor": { "const": "utc_midnight" }
+            "anchor": {
+              "const": "utc_midnight"
+            }
           }
         },
         {
           "type": "object",
-          "required": ["kind"],
+          "required": [
+            "kind"
+          ],
           "additionalProperties": false,
-          "properties": { "kind": { "const": "async" } }
+          "properties": {
+            "kind": {
+              "const": "async"
+            }
+          }
         }
       ]
     }
