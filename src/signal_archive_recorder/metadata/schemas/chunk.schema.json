@@ -2,173 +2,470 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://signal-archive-project.org/schemas/recorder/chunk/1",
   "title": "Signal Archive Recorder chunk metadata (<chunk_id>.meta.json)",
-  "description": "Mode-agnostic: mode-specific values live in mode.params, validated by the mode's own sub-schema. Adding a mode never changes this schema.",
+  "description": "Mode-agnostic: mode-specific values live in mode.params, validated by the mode's own sub-schema. Adding a mode never changes this schema. Recording metadata only: what third-party decoders found is published separately under labels/<source>/.",
   "type": "object",
-  "required": ["schema", "chunk_id", "session_id", "index", "time", "audio", "radio", "mode", "path", "tx_intervals", "sources", "decodes", "events"],
+  "required": [
+    "schema",
+    "chunk_id",
+    "session_id",
+    "index",
+    "time",
+    "audio",
+    "radio",
+    "mode",
+    "path",
+    "tx_intervals",
+    "sources",
+    "events"
+  ],
   "additionalProperties": false,
   "properties": {
-    "schema": { "const": "signal-archive-recorder/chunk/1" },
-    "chunk_id": { "type": "string", "pattern": "^\\d{4}_\\d{8}T\\d{6}Z$" },
-    "session_id": { "type": "string", "pattern": "^\\d{8}T\\d{6}Z(-\\d+)?$" },
-    "index": { "type": "integer", "minimum": 0 },
+    "schema": {
+      "const": "signal-archive-recorder/chunk/1"
+    },
+    "chunk_id": {
+      "type": "string",
+      "pattern": "^\\d{4}_\\d{8}T\\d{6}Z$"
+    },
+    "session_id": {
+      "type": "string",
+      "pattern": "^\\d{8}T\\d{6}Z(-\\d+)?$"
+    },
+    "index": {
+      "type": "integer",
+      "minimum": 0
+    },
     "time": {
       "type": "object",
-      "required": ["first_sample_utc", "first_sample_ns", "start_reason", "end_reason"],
+      "required": [
+        "first_sample_utc",
+        "first_sample_ns",
+        "start_reason",
+        "end_reason"
+      ],
       "additionalProperties": false,
       "properties": {
-        "first_sample_utc": { "oneOf": [{ "type": "null" }, { "$ref": "https://signal-archive-project.org/schemas/recorder/common/1#/$defs/utc" }] },
-        "first_sample_ns": { "type": ["integer", "null"], "description": "Nominal: session anchor plus sample count / rate. Drift is not corrected; see audio.sync_points." },
-        "start_reason": { "type": "string", "pattern": "^[a-z_+]+$" },
-        "end_reason": { "type": "string", "pattern": "^[a-z_+]+$" }
+        "first_sample_utc": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "https://signal-archive-project.org/schemas/recorder/common/1#/$defs/utc"
+            }
+          ]
+        },
+        "first_sample_ns": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "description": "Nominal: session anchor plus sample count / rate. Drift is not corrected; see audio.sync_points."
+        },
+        "start_reason": {
+          "type": "string",
+          "pattern": "^[a-z_+]+$"
+        },
+        "end_reason": {
+          "type": "string",
+          "pattern": "^[a-z_+]+$"
+        }
       }
     },
     "audio": {
       "type": "object",
-      "required": ["sample_rate", "channels", "bit_depth", "sample_count", "start_frame", "end_frame", "first_sample_frame", "flac", "levels", "gaps", "buffer_overrun_frames", "driver_overflows", "sync_points"],
+      "required": [
+        "sample_rate",
+        "channels",
+        "bit_depth",
+        "sample_count",
+        "start_frame",
+        "end_frame",
+        "first_sample_frame",
+        "flac",
+        "levels",
+        "gaps",
+        "buffer_overrun_frames",
+        "driver_overflows",
+        "sync_points"
+      ],
       "additionalProperties": false,
       "properties": {
-        "sample_rate": { "type": "integer", "minimum": 1 },
-        "channels": { "type": "integer", "minimum": 1 },
-        "bit_depth": { "enum": [16, 24] },
-        "sample_count": { "type": "integer", "minimum": 0, "description": "Actual frames in the FLAC file" },
-        "start_frame": { "type": "integer", "minimum": 0 },
-        "end_frame": { "type": "integer", "minimum": 0 },
-        "first_sample_frame": { "type": ["integer", "null"] },
+        "sample_rate": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "channels": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "bit_depth": {
+          "enum": [
+            16,
+            24
+          ]
+        },
+        "sample_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Actual frames in the FLAC file"
+        },
+        "start_frame": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "end_frame": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "first_sample_frame": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
         "flac": {
           "oneOf": [
-            { "type": "null" },
+            {
+              "type": "null"
+            },
             {
               "type": "object",
-              "required": ["file", "pcm_md5", "sha256", "verified"],
+              "required": [
+                "file",
+                "pcm_md5",
+                "sha256",
+                "verified"
+              ],
               "additionalProperties": false,
               "properties": {
-                "file": { "type": "string", "pattern": "^\\d{4}_\\d{8}T\\d{6}Z\\.flac(\\.corrupt)?$" },
-                "pcm_md5": { "$ref": "https://signal-archive-project.org/schemas/recorder/common/1#/$defs/md5" },
-                "sha256": { "$ref": "https://signal-archive-project.org/schemas/recorder/common/1#/$defs/sha256" },
-                "verified": { "type": "boolean" }
+                "file": {
+                  "type": "string",
+                  "pattern": "^\\d{4}_\\d{8}T\\d{6}Z\\.flac(\\.corrupt)?$"
+                },
+                "pcm_md5": {
+                  "$ref": "https://signal-archive-project.org/schemas/recorder/common/1#/$defs/md5"
+                },
+                "sha256": {
+                  "$ref": "https://signal-archive-project.org/schemas/recorder/common/1#/$defs/sha256"
+                },
+                "verified": {
+                  "type": "boolean"
+                }
               }
             }
           ]
         },
         "levels": {
           "type": "object",
-          "required": ["peak_dbfs", "rms_dbfs", "clipped"],
+          "required": [
+            "peak_dbfs",
+            "rms_dbfs",
+            "clipped"
+          ],
           "additionalProperties": false,
           "description": "Per channel. null means digital silence.",
           "properties": {
-            "peak_dbfs": { "type": "array", "items": { "type": ["number", "null"] } },
-            "rms_dbfs": { "type": "array", "items": { "type": ["number", "null"] } },
-            "clipped": { "type": "array", "items": { "type": "integer", "minimum": 0 } }
+            "peak_dbfs": {
+              "type": "array",
+              "items": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            },
+            "rms_dbfs": {
+              "type": "array",
+              "items": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            },
+            "clipped": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
           }
         },
         "gaps": {
           "type": "array",
           "items": {
             "type": "object",
-            "required": ["stream_frame", "lost_frames", "reason"],
+            "required": [
+              "stream_frame",
+              "lost_frames",
+              "reason"
+            ],
             "additionalProperties": false,
             "properties": {
-              "stream_frame": { "type": "integer", "minimum": 0 },
-              "lost_frames": { "type": ["integer", "null"] },
-              "reason": { "enum": ["buffer_overrun", "driver_overflow"] }
+              "stream_frame": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "lost_frames": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "reason": {
+                "enum": [
+                  "buffer_overrun",
+                  "driver_overflow"
+                ]
+              }
             }
           }
         },
-        "buffer_overrun_frames": { "type": "integer", "minimum": 0 },
-        "driver_overflows": { "type": "integer", "minimum": 0 },
+        "buffer_overrun_frames": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "driver_overflows": {
+          "type": "integer",
+          "minimum": 0
+        },
         "sync_points": {
           "description": "[stream frame, wall-clock UTC ns] about once a second, for drift estimation",
           "type": "array",
-          "items": { "type": "array", "prefixItems": [{ "type": "integer" }, { "type": "integer" }], "items": false, "minItems": 2 }
+          "items": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "items": false,
+            "minItems": 2
+          }
         }
       }
     },
     "radio": {
       "type": "object",
-      "required": ["dial_hz", "band", "sideband", "rig_mode", "filter_hz", "agc", "noise_blanker", "noise_reduction"],
+      "required": [
+        "dial_hz",
+        "band",
+        "sideband",
+        "rig_mode",
+        "filter_hz",
+        "agc",
+        "noise_blanker",
+        "noise_reduction"
+      ],
       "additionalProperties": false,
       "properties": {
-        "dial_hz": { "$ref": "https://signal-archive-project.org/schemas/recorder/common/1#/$defs/known" },
-        "band": { "$ref": "https://signal-archive-project.org/schemas/recorder/common/1#/$defs/known" },
-        "sideband": { "$ref": "https://signal-archive-project.org/schemas/recorder/common/1#/$defs/known" },
-        "rig_mode": { "$ref": "https://signal-archive-project.org/schemas/recorder/common/1#/$defs/known" },
-        "filter_hz": { "$ref": "https://signal-archive-project.org/schemas/recorder/common/1#/$defs/known" },
-        "agc": { "$ref": "https://signal-archive-project.org/schemas/recorder/common/1#/$defs/known" },
-        "noise_blanker": { "$ref": "https://signal-archive-project.org/schemas/recorder/common/1#/$defs/known" },
-        "noise_reduction": { "$ref": "https://signal-archive-project.org/schemas/recorder/common/1#/$defs/known" }
+        "dial_hz": {
+          "$ref": "https://signal-archive-project.org/schemas/recorder/common/1#/$defs/known"
+        },
+        "band": {
+          "$ref": "https://signal-archive-project.org/schemas/recorder/common/1#/$defs/known"
+        },
+        "sideband": {
+          "$ref": "https://signal-archive-project.org/schemas/recorder/common/1#/$defs/known"
+        },
+        "rig_mode": {
+          "$ref": "https://signal-archive-project.org/schemas/recorder/common/1#/$defs/known"
+        },
+        "filter_hz": {
+          "$ref": "https://signal-archive-project.org/schemas/recorder/common/1#/$defs/known"
+        },
+        "agc": {
+          "$ref": "https://signal-archive-project.org/schemas/recorder/common/1#/$defs/known"
+        },
+        "noise_blanker": {
+          "$ref": "https://signal-archive-project.org/schemas/recorder/common/1#/$defs/known"
+        },
+        "noise_reduction": {
+          "$ref": "https://signal-archive-project.org/schemas/recorder/common/1#/$defs/known"
+        }
       }
     },
     "mode": {
       "type": "object",
-      "required": ["mode_id", "raw", "needs_mapping", "params"],
+      "required": [
+        "mode_id",
+        "raw",
+        "needs_mapping",
+        "params"
+      ],
       "additionalProperties": false,
       "properties": {
-        "mode_id": { "$ref": "https://signal-archive-project.org/schemas/recorder/common/1#/$defs/known" },
-        "raw": { "type": ["string", "null"], "description": "The mode string as the decoder reported it" },
-        "needs_mapping": { "type": "boolean", "description": "The raw string isn't in modes.json yet" },
-        "params": { "type": "object", "description": "Validated by the mode's params_schema from modes.json" }
+        "mode_id": {
+          "$ref": "https://signal-archive-project.org/schemas/recorder/common/1#/$defs/known"
+        },
+        "raw": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "The mode string as the decoder reported it"
+        },
+        "needs_mapping": {
+          "type": "boolean",
+          "description": "The raw string isn't in modes.json yet"
+        },
+        "params": {
+          "type": "object",
+          "description": "Validated by the mode's params_schema from modes.json"
+        }
       }
     },
     "path": {
       "type": "object",
-      "required": ["type"],
+      "required": [
+        "type"
+      ],
       "additionalProperties": false,
-      "properties": { "type": { "$ref": "https://signal-archive-project.org/schemas/recorder/common/1#/$defs/known" } }
+      "properties": {
+        "type": {
+          "$ref": "https://signal-archive-project.org/schemas/recorder/common/1#/$defs/known"
+        }
+      }
     },
     "tx_intervals": {
       "description": "[start, end) frame offsets from start_frame while transmitting; the pipeline excludes them",
       "type": "array",
-      "items": { "type": "array", "prefixItems": [{ "type": "integer" }, { "type": "integer" }], "items": false, "minItems": 2 }
+      "items": {
+        "type": "array",
+        "prefixItems": [
+          {
+            "type": "integer"
+          },
+          {
+            "type": "integer"
+          }
+        ],
+        "items": false,
+        "minItems": 2
+      }
     },
     "sources": {
       "type": "object",
       "additionalProperties": {
         "type": "object",
-        "required": ["up_at_start", "down"],
+        "required": [
+          "up_at_start",
+          "down"
+        ],
         "additionalProperties": false,
         "properties": {
-          "up_at_start": { "type": "boolean" },
+          "up_at_start": {
+            "type": "boolean"
+          },
           "down": {
             "type": "array",
-            "items": { "type": "array", "prefixItems": [{ "type": "integer" }, { "type": "integer" }, { "type": "string" }], "items": false, "minItems": 3 }
+            "items": {
+              "type": "array",
+              "prefixItems": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "string"
+                }
+              ],
+              "items": false,
+              "minItems": 3
+            }
           }
         }
-      }
-    },
-    "decodes": {
-      "type": "object",
-      "required": ["count", "off_air_count", "median_dt_s"],
-      "additionalProperties": false,
-      "description": "Live decodes only; decodes of played-back files are counted separately and never included.",
-      "properties": {
-        "count": { "$ref": "https://signal-archive-project.org/schemas/recorder/common/1#/$defs/known" },
-        "off_air_count": { "type": "integer", "minimum": 0 },
-        "median_dt_s": { "$ref": "https://signal-archive-project.org/schemas/recorder/common/1#/$defs/known" }
       }
     },
     "events": {
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["type", "source", "t_ns", "frame_offset"],
+        "required": [
+          "type",
+          "source",
+          "t_ns",
+          "frame_offset"
+        ],
         "additionalProperties": false,
         "properties": {
-          "type": { "enum": ["FreqChanged", "ModeChanged", "SettingChanged", "SourceUp", "SourceDown", "TxStarted", "TxEnded", "AudioGap", "CaptureWarning", "Note"] },
-          "source": { "type": "string" },
-          "t_ns": { "type": "integer" },
-          "frame_offset": { "type": "integer" },
-          "late": { "const": true },
-          "dial_hz": { "type": "integer" },
-          "mode_id": { "type": "string" },
-          "raw_mode": { "type": "string" },
-          "needs_mapping": { "type": "boolean" },
-          "period_s": { "type": ["number", "null"] },
-          "reason": { "type": "string" },
-          "detail": { "type": "string" },
-          "name": { "type": "string" },
-          "value": { "type": ["string", "number", "boolean", "null"] },
-          "code": { "type": "string" },
-          "lost_frames": { "type": ["integer", "null"] }
+          "type": {
+            "enum": [
+              "FreqChanged",
+              "ModeChanged",
+              "SettingChanged",
+              "SourceUp",
+              "SourceDown",
+              "TxStarted",
+              "TxEnded",
+              "AudioGap",
+              "CaptureWarning",
+              "Note"
+            ]
+          },
+          "source": {
+            "type": "string"
+          },
+          "t_ns": {
+            "type": "integer"
+          },
+          "frame_offset": {
+            "type": "integer"
+          },
+          "late": {
+            "const": true
+          },
+          "dial_hz": {
+            "type": "integer"
+          },
+          "mode_id": {
+            "type": "string"
+          },
+          "raw_mode": {
+            "type": "string"
+          },
+          "needs_mapping": {
+            "type": "boolean"
+          },
+          "period_s": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "reason": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "value": {
+            "type": [
+              "string",
+              "number",
+              "boolean",
+              "null"
+            ]
+          },
+          "code": {
+            "type": "string"
+          },
+          "lost_frames": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
         }
       }
     }

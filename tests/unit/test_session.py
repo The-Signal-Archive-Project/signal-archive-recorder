@@ -44,9 +44,9 @@ def assert_all_verified(rig: Rig, chunks: list[dict[str, Any]]) -> None:
     for c in chunks:
         assert c["audio"]["flac"]["verified"], c["chunk_id"]
         assert verify_flac(
-            rig.session.path / c["audio"]["flac"]["file"], FMT, c["audio"]["flac"]["pcm_md5"]
+            rig.session.recordings / c["audio"]["flac"]["file"], FMT, c["audio"]["flac"]["pcm_md5"]
         ).ok
-    joined = b"".join(read_raw(rig.session.path, c) for c in chunks)
+    joined = b"".join(read_raw(rig.session.recordings, c) for c in chunks)
     assert joined == rig.data, "chunks don't concatenate to the original stream"
 
 
@@ -230,8 +230,10 @@ def test_decode_counts_split_live_and_off_air(tmp_path: Path) -> None:
     for off_air in (False, False, True):
         rig.publish(Decode(source="wsjtx", mode_id="ft8", text="CQ TEST", off_air=off_air))
     [chunk] = rig.finish()
-    assert chunk["decodes"]["count"]["value"] == 2
-    assert chunk["decodes"]["off_air_count"] == 1
+    stats = rig.label_stats()[chunk["chunk_id"]]
+    assert stats["count"]["value"] == 2
+    assert stats["off_air_count"] == 1
+    assert "decodes" not in chunk  # decoder output never sits in recording metadata
 
 
 def test_session_json_and_files(tmp_path: Path) -> None:
@@ -244,11 +246,12 @@ def test_session_json_and_files(tmp_path: Path) -> None:
     assert session["ended_ns"] is not None and session["end_reason"] == "stopped"
     assert session["chunks"] == [c["chunk_id"] for c in chunks]
     assert chunks[0]["chunk_id"] == "0000_20261005T120307Z"
-    names = sorted(p.name for p in folder.iterdir())
-    assert names == sorted(
-        ["session.json"]
-        + [f"{c['chunk_id']}{ext}" for c in chunks for ext in (".flac", ".meta.json")]
-    )
+    top = sorted(p.name for p in folder.iterdir())
+    assert top == ["recordings", "session.json"]  # no labels: no decoder ran
+    recordings = sorted(p.name for p in (folder / "recordings").iterdir())
+    expected = [f"{c['chunk_id']}{ext}" for c in chunks for ext in (".flac", ".meta.json")]
+    assert recordings == sorted(expected)
+    assert session["labels"] == []
 
 
 # -- direct-feed tests (no capture thread) ------------------------------------
@@ -335,8 +338,38 @@ def test_captured_wsjtx_traffic_drives_chunks(tmp_path: Path) -> None:
     dials = [c["radio"]["dial_hz"]["value"] for c in chunks]
     assert dials == [14_074_000, 7_074_000, 7_047_500, 7_047_500]
     assert [c["mode"]["mode_id"]["value"] for c in chunks] == ["ft8", "ft8", "ft4", "ft4"]
-    assert chunks[2]["decodes"]["count"]["value"] == 0
-    assert chunks[2]["decodes"]["off_air_count"] == 5
+    stats = rig.label_stats()[chunks[2]["chunk_id"]]
+    assert stats["count"]["value"] == 0
+    assert stats["off_air_count"] == 5
     assert chunks[2]["tx_intervals"] == [[frames(10), frames(15)]]
     assert len(decode_log.read_text().splitlines()) == 5
     assert_all_verified(rig, chunks)
+
+
+def test_labels_never_mix_with_recordings(tmp_path: Path) -> None:
+    """Third-party decoder output lives under labels/, never beside or inside recordings."""
+    from signal_archive_recorder.sources.wsjtx import messages as m
+    from signal_archive_recorder.sources.wsjtx.listener import WsjtxListener
+
+    rig = Rig(tmp_path, seconds=30)
+    listener = WsjtxListener(
+        rig.bus, REGISTRY, rig.clock, decode_log=rig.session.decode_log("wsjtx")
+    )
+    wsjtx_up(rig)
+    rig.pump_to(10)
+    decode = m.Decode("WSJT-X", True, 1000, -7, 0.2, 1200, "~", "CQ LABEL1 FN42", False, False)
+    listener.handle(m.encode(decode))
+    rig.bus.wait_idle()
+    chunks = rig.finish()
+
+    recordings = sorted(p.name for p in rig.session.recordings.iterdir())
+    assert all(n.endswith((".flac", ".meta.json")) for n in recordings)
+    for path in rig.session.recordings.iterdir():
+        assert b"LABEL1" not in path.read_bytes(), path.name
+    for chunk in chunks:
+        assert not {"decodes", "labels"} & set(chunk)
+    labels = sorted(str(p.relative_to(rig.session.labels)) for p in rig.session.labels.rglob("*"))
+    assert labels == ["wsjtx", "wsjtx/chunk_stats.jsonl", "wsjtx/decodes.jsonl"]
+    assert "LABEL1" in rig.session.decode_log("wsjtx").read_text()
+    session = json.loads(rig.session.session_json.read_text())
+    assert session["labels"] == ["wsjtx"]

@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """A whole recorder on a fake clock: fake sound card, capture, bus and session manager."""
 
+import json
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -79,3 +80,9 @@ class Rig:
         chunks = self.manager.close()
         self.bus.close()
         return sorted(chunks, key=lambda c: c["index"])
+
+    def label_stats(self, source: str = "wsjtx") -> dict[str, dict[str, Any]]:
+        """labels/<source>/chunk_stats.jsonl, keyed by chunk id."""
+        path = self.session.label_stats(source)
+        lines = [json.loads(x) for x in path.read_text().splitlines()] if path.exists() else []
+        return {line["chunk_id"]: line for line in lines}

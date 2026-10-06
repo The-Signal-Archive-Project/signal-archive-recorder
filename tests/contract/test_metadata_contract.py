@@ -35,9 +35,13 @@ def test_session_and_chunk_validate(tmp_path: Path, mode: Mode) -> None:
     chunks = rig.finish()
 
     folder = rig.session.path
-    for path in folder.glob("*.meta.json"):
+    for path in (folder / "recordings").glob("*.meta.json"):
         validator("chunk").validate(json.loads(path.read_text()))
     validator("session").validate(json.loads((folder / "session.json").read_text()))
+    stats = rig.label_stats("decoder")
+    assert set(stats) == {c["chunk_id"] for c in chunks}
+    for line in stats.values():
+        validator("label_stats").validate(line)
     assert chunks and all(c["mode"]["mode_id"]["value"] == mode.id for c in chunks)
     if mode.params_schema and period is not None:
         assert chunks[0]["mode"]["params"]["period_s"] == period

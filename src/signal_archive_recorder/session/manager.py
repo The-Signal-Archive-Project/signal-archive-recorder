@@ -17,6 +17,7 @@ that starts while that source is down records null with reason source_unavailabl
 from __future__ import annotations
 
 import bisect
+import json
 import logging
 import threading
 from collections import deque
@@ -93,9 +94,8 @@ class _Chunk:
     down_open: dict[str, tuple[int, str]] = field(default_factory=dict)
     events: list[dict[str, Any]] = field(default_factory=list)
     gaps: list[dict[str, Any]] = field(default_factory=list)
-    decodes_live: int = 0
-    decodes_off_air: int = 0
-    live_dt_s: list[float] = field(default_factory=list)
+    # Third-party decoder output per source: labels, kept out of the recording metadata.
+    labels: dict[str, dict[str, Any]] = field(default_factory=dict)
 
 
 class SessionManager:
@@ -173,7 +173,7 @@ class SessionManager:
         self._finalizer.shutdown(wait=True)
         assert self.session is not None
         # Sources must be stopped first: decode logs are rewritten for publication.
-        for decode_log in sorted(self.session.path.glob("*_decodes.jsonl")):
+        for decode_log in sorted(self.session.labels.glob("*/decodes.jsonl")):
             self.builder.publish_decode_log(decode_log)
         self._write_session(ended_ns=self._clock.now_ns(), end_reason=end_reason)
         return self.chunks
@@ -332,12 +332,13 @@ class SessionManager:
         if chunk is None:
             return
         if isinstance(e, Decode):
+            stats = chunk.labels.setdefault(e.source, {"live": 0, "off_air": 0, "live_dt_s": []})
             if e.off_air:
-                chunk.decodes_off_air += 1
+                stats["off_air"] += 1
             else:
-                chunk.decodes_live += 1
+                stats["live"] += 1
                 if e.dt_s is not None:
-                    chunk.live_dt_s.append(e.dt_s)
+                    stats["live_dt_s"].append(e.dt_s)
             return
         chunk.events.append(self._event_record(change))
 
@@ -469,10 +470,13 @@ class SessionManager:
         except MetadataError:
             # A bug, not bad luck: keep the record locally, and never publish it.
             log.exception("chunk %s metadata failed validation", chunk.chunk_id)
-            invalid = session.path / f"{chunk.chunk_id}.meta.invalid.json"
-            write_json_atomic(invalid, record)
+            session.local.mkdir(exist_ok=True)
+            write_json_atomic(session.local / f"{chunk.chunk_id}.meta.invalid.json", record)
             return record
         write_json_atomic(session.meta(chunk.chunk_id), meta)
+        for stats in self.builder.label_stats(record):
+            with session.label_stats(stats["source"]).open("a", encoding="utf-8") as f:
+                f.write(json.dumps(stats) + "\n")
         with self._lock:
             self.chunks.append(meta)
         return meta
@@ -515,11 +519,7 @@ class SessionManager:
                 }
                 for source, spans in {**{s: [] for s in chunk.sources_up}, **chunk.down}.items()
             },
-            "decodes": {
-                "live": chunk.decodes_live,
-                "off_air": chunk.decodes_off_air,
-                "live_dt_s": chunk.live_dt_s,
-            },
+            "labels": chunk.labels,
             "events": chunk.events,
         }
 
@@ -528,6 +528,11 @@ class SessionManager:
         with self._lock:
             chunk_ids = sorted(c["chunk_id"] for c in self.chunks)
             software = dict(self.software)
+        labels = (
+            sorted(p.name for p in self.session.labels.iterdir() if p.is_dir())
+            if (self.session.labels.is_dir())
+            else []
+        )
         meta = self.builder.session(
             {
                 "session_id": self.session.session_id,
@@ -541,6 +546,7 @@ class SessionManager:
                 },
                 "software": software,
                 "chunks": chunk_ids,
+                "labels": labels,
             }
         )
         write_json_atomic(self.session.session_json, meta)

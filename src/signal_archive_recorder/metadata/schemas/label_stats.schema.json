@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://signal-archive-project.org/schemas/recorder/label-stats/1",
+  "title": "One line of labels/<source>/chunk_stats.jsonl",
+  "description": "What a third-party decoder reported during one chunk. Live decodes only; decodes of played-back files are counted separately.",
+  "type": "object",
+  "required": [
+    "schema",
+    "chunk_id",
+    "source",
+    "count",
+    "off_air_count",
+    "median_dt_s"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema": {
+      "const": "signal-archive-recorder/label-chunk-stats/1"
+    },
+    "chunk_id": {
+      "type": "string",
+      "pattern": "^\\d{4}_\\d{8}T\\d{6}Z$"
+    },
+    "source": {
+      "type": "string"
+    },
+    "count": {
+      "$ref": "https://signal-archive-project.org/schemas/recorder/common/1#/$defs/known"
+    },
+    "off_air_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "median_dt_s": {
+      "$ref": "https://signal-archive-project.org/schemas/recorder/common/1#/$defs/known"
+    }
+  }
+}

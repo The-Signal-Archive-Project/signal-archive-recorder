@@ -33,6 +33,7 @@ from signal_archive_recorder.modes.registry import ModeRegistry
 log = logging.getLogger(__name__)
 
 CHUNK_SCHEMA = "signal-archive-recorder/chunk/1"
+LABEL_STATS_SCHEMA = "signal-archive-recorder/label-chunk-stats/1"
 SESSION_SCHEMA = "signal-archive-recorder/session/1"
 SOURCE_UNAVAILABLE = "source_unavailable"
 NOT_REPORTED = "not_reported"
@@ -72,7 +73,7 @@ def known(value: Any, reason: str | None = None, source: str | None = None) -> d
 @cache
 def _schemas() -> tuple[dict[str, dict[str, Any]], Registry[Any]]:
     loaded = {}
-    for name in ("common", "chunk", "session", "decode"):
+    for name in ("common", "chunk", "session", "decode", "label_stats"):
         text = files(__package__).joinpath(f"schemas/{name}.schema.json").read_text("utf-8")
         loaded[name] = json.loads(text)
     registry: Registry[Any] = Registry().with_resources(
@@ -125,6 +126,7 @@ class MetadataBuilder:
         self._chunk_validator = _validator("chunk")
         self._session_validator = _validator("session")
         self._decode_validator = _validator("decode")
+        self._label_stats_validator = _validator("label_stats")
 
     def _drop(self, what: str) -> None:
         self.dropped.append(what)
@@ -168,7 +170,6 @@ class MetadataBuilder:
                 }
                 for name, src in rec["sources"].items()
             },
-            "decodes": self._decode_stats(rec),
             "events": [e for e in (self._event(ev, start) for ev in rec["events"]) if e],
         }
         self._check(self._chunk_validator, meta, rec["chunk_id"])
@@ -249,8 +250,24 @@ class MetadataBuilder:
                 del params[key]
         return params
 
-    def _decode_stats(self, rec: dict[str, Any]) -> dict[str, Any]:
-        decodes = rec["decodes"]
+    def label_stats(self, rec: dict[str, Any]) -> list[dict[str, Any]]:
+        """Per-source decode statistics for a chunk: labels, published apart from it."""
+        out = []
+        labels = dict(rec.get("labels", {}))
+        if decoder := rec["mode"].get("source"):  # the decoder ran, even if it heard nothing
+            labels.setdefault(decoder, {"live": 0, "off_air": 0, "live_dt_s": []})
+        for source, decodes in sorted(labels.items()):
+            stats = {
+                "schema": LABEL_STATS_SCHEMA,
+                "chunk_id": rec["chunk_id"],
+                "source": self._text(source),
+                **self._decode_stats(rec, decodes),
+            }
+            self._check(self._label_stats_validator, stats, f"{rec['chunk_id']} {source} stats")
+            out.append(stats)
+        return out
+
+    def _decode_stats(self, rec: dict[str, Any], decodes: dict[str, Any]) -> dict[str, Any]:
         off_air = int(decodes.get("off_air", 0))
         mode = rec["mode"]
         if mode["value"] is None:
@@ -346,6 +363,7 @@ class MetadataBuilder:
             "clock": {"time_source": known(None, NOT_REPORTED), "offsets": []},
             "software": {self._text(k): self._text(v) for k, v in info["software"].items()},
             "chunks": list(info["chunks"]),
+            "labels": [self._text(x) for x in info.get("labels", [])],
         }
         self._check(self._session_validator, meta, info["session_id"])
         return meta

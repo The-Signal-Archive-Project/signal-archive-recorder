@@ -47,7 +47,8 @@ def test_unknown_is_null_with_reason(tmp_path: Path) -> None:
         assert radio[field] == SOURCE_UNAVAILABLE, field
     assert chunk["mode"]["mode_id"] == SOURCE_UNAVAILABLE
     assert chunk["mode"]["params"] == {}
-    assert chunk["decodes"]["count"] == SOURCE_UNAVAILABLE
+    assert "decodes" not in chunk
+    assert rig.label_stats() == {}  # no decoder, no labels
     assert chunk["path"]["type"] == SOURCE_UNAVAILABLE
 
 
@@ -74,9 +75,10 @@ def test_median_dt(tmp_path: Path) -> None:
         rig.publish(Decode(source="wsjtx", mode_id="ft8", text="CQ K1ABC FN42", dt_s=dt))
     rig.publish(Decode(source="wsjtx", mode_id="ft8", text="CQ X", dt_s=2.0, off_air=True))
     [chunk] = rig.finish()
-    assert chunk["decodes"]["count"]["value"] == 4
-    assert chunk["decodes"]["median_dt_s"]["value"] == pytest.approx(0.2)  # off-air excluded
-    assert chunk["decodes"]["off_air_count"] == 1
+    stats = rig.label_stats()[chunk["chunk_id"]]
+    assert stats["count"]["value"] == 4
+    assert stats["median_dt_s"]["value"] == pytest.approx(0.2)  # off-air excluded
+    assert stats["off_air_count"] == 1
 
 
 def test_median_dt_not_applicable_for_async(tmp_path: Path) -> None:
@@ -84,16 +86,18 @@ def test_median_dt_not_applicable_for_async(tmp_path: Path) -> None:
     wsjtx(rig, mode="psk31")
     rig.publish(Decode(source="wsjtx", mode_id="psk31", text="cq cq", dt_s=0.1))
     [chunk] = rig.finish()
+    stats = rig.label_stats()[chunk["chunk_id"]]
     na = {"value": None, "reason": "not_applicable"}
-    assert chunk["decodes"]["count"] == na and chunk["decodes"]["median_dt_s"] == na
+    assert stats["count"] == na and stats["median_dt_s"] == na
 
 
 def test_no_decodes_is_not_reported(tmp_path: Path) -> None:
     rig = run(tmp_path, seconds=20)
     wsjtx(rig)
     [chunk] = rig.finish()
-    assert chunk["decodes"]["count"]["value"] == 0
-    assert chunk["decodes"]["median_dt_s"] == {"value": None, "reason": "not_reported"}
+    stats = rig.label_stats()[chunk["chunk_id"]]  # the decoder ran but heard nothing
+    assert stats["count"]["value"] == 0
+    assert stats["median_dt_s"] == {"value": None, "reason": "not_reported"}
 
 
 def test_events_list(tmp_path: Path) -> None:
@@ -119,7 +123,11 @@ def test_events_list(tmp_path: Path) -> None:
 
 
 def _text_files(folder: Path) -> list[tuple[str, str]]:
-    return [(p.name, p.read_bytes().decode("latin-1")) for p in sorted(folder.iterdir())]
+    return [
+        (str(p.relative_to(folder)), p.read_bytes().decode("latin-1"))
+        for p in sorted(folder.rglob("*"))
+        if p.is_file()
+    ]
 
 
 def test_privacy_no_leaks(tmp_path: Path) -> None:
@@ -248,9 +256,9 @@ def test_invalid_metadata_never_published(tmp_path: Path) -> None:
 
     rig.manager.builder.chunk = broken  # type: ignore[method-assign]
     assert rig.finish() == []
-    names = {p.name for p in rig.session.path.iterdir()}
-    assert any(n.endswith(".meta.invalid.json") for n in names)
-    assert not any(n.endswith(".meta.json") for n in names)
+    local = {p.name for p in rig.session.local.iterdir()}
+    assert any(n.endswith(".meta.invalid.json") for n in local)  # kept, but never published
+    assert not any(p.name.endswith(".meta.json") for p in rig.session.recordings.iterdir())
 
 
 def test_consent_recorded(tmp_path: Path) -> None:

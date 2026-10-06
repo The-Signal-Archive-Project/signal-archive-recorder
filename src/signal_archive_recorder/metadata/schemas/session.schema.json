@@ -3,82 +3,241 @@
   "$id": "https://signal-archive-project.org/schemas/recorder/session/1",
   "title": "Signal Archive Recorder session metadata (session.json)",
   "type": "object",
-  "required": ["schema", "session_id", "app", "platform", "started_utc", "started_ns", "ended_utc", "ended_ns", "end_reason", "operator", "location", "consent", "audio", "clock", "software", "chunks"],
+  "required": [
+    "schema",
+    "session_id",
+    "app",
+    "platform",
+    "started_utc",
+    "started_ns",
+    "ended_utc",
+    "ended_ns",
+    "end_reason",
+    "operator",
+    "location",
+    "consent",
+    "audio",
+    "clock",
+    "software",
+    "chunks",
+    "labels"
+  ],
   "additionalProperties": false,
   "properties": {
-    "schema": { "const": "signal-archive-recorder/session/1" },
-    "session_id": { "type": "string", "pattern": "^\\d{8}T\\d{6}Z(-\\d+)?$" },
+    "schema": {
+      "const": "signal-archive-recorder/session/1"
+    },
+    "session_id": {
+      "type": "string",
+      "pattern": "^\\d{8}T\\d{6}Z(-\\d+)?$"
+    },
     "app": {
       "type": "object",
-      "required": ["name", "version"],
+      "required": [
+        "name",
+        "version"
+      ],
       "additionalProperties": false,
-      "properties": { "name": { "const": "signal-archive-recorder" }, "version": { "type": "string" } }
+      "properties": {
+        "name": {
+          "const": "signal-archive-recorder"
+        },
+        "version": {
+          "type": "string"
+        }
+      }
     },
     "platform": {
       "type": "object",
-      "required": ["os", "os_release", "python"],
-      "additionalProperties": false,
-      "properties": { "os": { "type": "string" }, "os_release": { "type": "string" }, "python": { "type": "string" } }
-    },
-    "started_utc": { "$ref": "https://signal-archive-project.org/schemas/recorder/common/1#/$defs/utc" },
-    "started_ns": { "type": "integer" },
-    "ended_utc": { "oneOf": [{ "type": "null" }, { "$ref": "https://signal-archive-project.org/schemas/recorder/common/1#/$defs/utc" }] },
-    "ended_ns": { "type": ["integer", "null"] },
-    "end_reason": { "type": ["string", "null"] },
-    "operator": {
-      "type": "object",
-      "required": ["callsign", "hf_username", "station_profile_id"],
+      "required": [
+        "os",
+        "os_release",
+        "python"
+      ],
       "additionalProperties": false,
       "properties": {
-        "callsign": { "$ref": "https://signal-archive-project.org/schemas/recorder/common/1#/$defs/known", "description": "Only when the operator chose to share it" },
-        "hf_username": { "type": ["string", "null"] },
-        "station_profile_id": { "type": ["string", "null"] }
+        "os": {
+          "type": "string"
+        },
+        "os_release": {
+          "type": "string"
+        },
+        "python": {
+          "type": "string"
+        }
+      }
+    },
+    "started_utc": {
+      "$ref": "https://signal-archive-project.org/schemas/recorder/common/1#/$defs/utc"
+    },
+    "started_ns": {
+      "type": "integer"
+    },
+    "ended_utc": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "https://signal-archive-project.org/schemas/recorder/common/1#/$defs/utc"
+        }
+      ]
+    },
+    "ended_ns": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "end_reason": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "operator": {
+      "type": "object",
+      "required": [
+        "callsign",
+        "hf_username",
+        "station_profile_id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "callsign": {
+          "$ref": "https://signal-archive-project.org/schemas/recorder/common/1#/$defs/known",
+          "description": "Only when the operator chose to share it"
+        },
+        "hf_username": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "station_profile_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
       }
     },
     "location": {
       "type": "object",
-      "required": ["grid", "grid_precision"],
+      "required": [
+        "grid",
+        "grid_precision"
+      ],
       "additionalProperties": false,
       "properties": {
-        "grid": { "$ref": "https://signal-archive-project.org/schemas/recorder/common/1#/$defs/known" },
-        "grid_precision": { "enum": [0, 4, 6, 8], "description": "Characters shared; 0 = withheld" }
+        "grid": {
+          "$ref": "https://signal-archive-project.org/schemas/recorder/common/1#/$defs/known"
+        },
+        "grid_precision": {
+          "enum": [
+            0,
+            4,
+            6,
+            8
+          ],
+          "description": "Characters shared; 0 = withheld"
+        }
       }
     },
     "consent": {
       "oneOf": [
-        { "type": "null" },
+        {
+          "type": "null"
+        },
         {
           "type": "object",
-          "required": ["accepted_utc", "license_id"],
+          "required": [
+            "accepted_utc",
+            "license_id"
+          ],
           "additionalProperties": false,
-          "properties": { "accepted_utc": { "$ref": "https://signal-archive-project.org/schemas/recorder/common/1#/$defs/utc" }, "license_id": { "type": "string" } }
+          "properties": {
+            "accepted_utc": {
+              "$ref": "https://signal-archive-project.org/schemas/recorder/common/1#/$defs/utc"
+            },
+            "license_id": {
+              "type": "string"
+            }
+          }
         }
       ]
     },
     "audio": {
       "type": "object",
-      "required": ["sample_rate", "channels", "bit_depth"],
+      "required": [
+        "sample_rate",
+        "channels",
+        "bit_depth"
+      ],
       "additionalProperties": false,
       "properties": {
-        "sample_rate": { "type": "integer" },
-        "channels": { "type": "integer" },
-        "bit_depth": { "enum": [16, 24] }
+        "sample_rate": {
+          "type": "integer"
+        },
+        "channels": {
+          "type": "integer"
+        },
+        "bit_depth": {
+          "enum": [
+            16,
+            24
+          ]
+        }
       }
     },
     "clock": {
       "type": "object",
-      "required": ["time_source", "offsets"],
+      "required": [
+        "time_source",
+        "offsets"
+      ],
       "additionalProperties": false,
       "properties": {
-        "time_source": { "$ref": "https://signal-archive-project.org/schemas/recorder/common/1#/$defs/known" },
-        "offsets": { "type": "array", "items": { "type": "array", "prefixItems": [{ "type": "integer" }, { "type": "number" }], "items": false, "minItems": 2 } }
+        "time_source": {
+          "$ref": "https://signal-archive-project.org/schemas/recorder/common/1#/$defs/known"
+        },
+        "offsets": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "items": false,
+            "minItems": 2
+          }
+        }
       }
     },
     "software": {
       "description": "Programs that reported during the session, e.g. {\"wsjtx\": \"WSJT-X 3.0.2\"}",
       "type": "object",
-      "additionalProperties": { "type": "string" }
+      "additionalProperties": {
+        "type": "string"
+      }
     },
-    "chunks": { "type": "array", "items": { "type": "string" } }
+    "chunks": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "labels": {
+      "description": "Label sources present under labels/<source>/ (third-party decoder output, kept apart from recordings/)",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
   }
 }
