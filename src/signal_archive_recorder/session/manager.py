@@ -34,6 +34,7 @@ from signal_archive_recorder.core.clock import Clock
 from signal_archive_recorder.core.events import (
     AudioGap,
     CaptureWarning,
+    ClockChecked,
     Decode,
     Event,
     FreqChanged,
@@ -96,6 +97,7 @@ class _Chunk:
     gaps: list[dict[str, Any]] = field(default_factory=list)
     # Third-party decoder output per source: labels, kept out of the recording metadata.
     labels: dict[str, dict[str, Any]] = field(default_factory=dict)
+    clock_before: dict[str, Any] | None = None
 
 
 class SessionManager:
@@ -143,6 +145,7 @@ class SessionManager:
         self._up: dict[str, bool] = {}
         self._settings: dict[str, Known] = {}
         self.software: dict[str, str] = {}
+        self.clock_checks: list[dict[str, Any]] = []
         self._tx = False
         self._finalizer = ThreadPoolExecutor(max_workers=1, thread_name_prefix="chunk-final")
         self._futures: list[Future[dict[str, Any]]] = []
@@ -325,6 +328,9 @@ class SessionManager:
             if chunk and chunk.tx_open is not None:
                 chunk.tx_intervals.append([chunk.tx_open, frame])
                 chunk.tx_open = None
+        elif isinstance(e, ClockChecked):
+            check = self._clock_record(e, frame)
+            self.clock_checks.append(check)
         elif isinstance(e, AudioGap) and chunk:
             chunk.gaps.append(
                 {"stream_frame": e.stream_frame, "lost_frames": e.lost_frames, "reason": e.reason}
@@ -371,7 +377,23 @@ class SessionManager:
             record.update(code=e.code, message=e.message)
         elif isinstance(e, AudioGap):
             record.update(lost_frames=e.lost_frames, reason=e.reason)
+        elif isinstance(e, ClockChecked):
+            record.update(self._clock_record(e, change.frame))
         return record
+
+    @staticmethod
+    def _clock_record(e: ClockChecked, frame: int) -> dict[str, Any]:
+        return {
+            "measured_ns": e.measured_ns,
+            "stream_frame": frame,
+            "offset_s": e.offset_s,
+            "delay_s": e.delay_s,
+            "stratum": e.stratum,
+            "server": e.server,
+            "status": e.status,
+            "os_synchronized": e.os_synchronized,
+            "os_sync_tool": e.os_sync_tool,
+        }
 
     # -- chunks ------------------------------------------------------------------
 
@@ -411,6 +433,7 @@ class SessionManager:
         chunk.dial = self._known(self._dial)
         chunk.settings = {name: self._known(k) for name, k in self._settings.items()}
         chunk.sources_up = dict(self._up)
+        chunk.clock_before = self.clock_checks[-1] if self.clock_checks else None
         policy = self._policy(chunk.mode)
         start_ns = self._timeline.frame_to_ns(chunk.start_frame)
         half_frame = 500_000_000 // self.format.sample_rate
@@ -520,6 +543,7 @@ class SessionManager:
                 for source, spans in {**{s: [] for s in chunk.sources_up}, **chunk.down}.items()
             },
             "labels": chunk.labels,
+            "clock_before": chunk.clock_before,
             "events": chunk.events,
         }
 
@@ -528,6 +552,7 @@ class SessionManager:
         with self._lock:
             chunk_ids = sorted(c["chunk_id"] for c in self.chunks)
             software = dict(self.software)
+            clock_checks = list(self.clock_checks)
         labels = (
             sorted(p.name for p in self.session.labels.iterdir() if p.is_dir())
             if (self.session.labels.is_dir())
@@ -547,6 +572,7 @@ class SessionManager:
                 "software": software,
                 "chunks": chunk_ids,
                 "labels": labels,
+                "clock_checks": clock_checks,
             }
         )
         write_json_atomic(self.session.session_json, meta)
