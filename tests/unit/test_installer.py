@@ -55,6 +55,13 @@ def test_installer_and_app_agree() -> None:
     assert 'ValueData: """{app}\\{#AppExe}"""' in ISS
 
 
+def test_windows_version_fields_stay_numeric() -> None:
+    """Inno Setup rejects '0.3.0b1' in the numeric fields: betas broke the first build."""
+    for directive in ("VersionInfoVersion", "VersionInfoProductVersion"):
+        assert f"{directive}={{#NumericVersion}}" in ISS
+    assert "VersionInfoProductTextVersion={#AppVersion}" in ISS
+
+
 def test_uninstaller_calls_real_forget_options() -> None:
     used = set(re.findall(r"--[a-z-]+", " ".join(re.findall(r"Params := .*", ISS))))
     assert used == {"--yes", "--everything", "--token"}
