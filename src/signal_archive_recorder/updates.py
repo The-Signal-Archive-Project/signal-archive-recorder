@@ -18,7 +18,7 @@ import threading
 import urllib.request
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 from packaging.version import InvalidVersion, Version
 
@@ -34,6 +34,7 @@ DAY_S = 86_400.0
 FIRST_CHECK_S = 15.0  # let start-up finish first
 
 Fetch = Callable[[], list[dict[str, Any]]]
+Level = Literal["info", "recommended", "important"]
 
 
 @dataclass(frozen=True)
@@ -46,6 +47,54 @@ class Release:
     @property
     def label(self) -> str:
         return self.tag.removeprefix("v")
+
+
+@dataclass(frozen=True)
+class Notice:
+    """What to tell the operator about a newer version, worded for where they are."""
+
+    level: Level  # important: please update now; recommended: fixes; info: new features
+    title: str
+    text: str
+
+
+def _label(v: Version) -> str:
+    base = v.base_version
+    if v.pre:
+        name = {"a": "alpha", "b": "beta", "rc": "rc"}[v.pre[0]]
+        return f"{base}-{name}.{v.pre[1]}"
+    return base
+
+
+def notice(release: Release, current: str = __version__) -> Notice:
+    mine = Version(current)
+    new = release.version
+    if mine.is_prerelease and not new.is_prerelease:
+        return Notice(
+            "important",
+            f"Version {release.label} is out: please switch from the beta",
+            f"You're running a beta ({_label(mine)}). The finished release {release.label} is "
+            "out, and betas aren't supported once it is, so please update now. From the "
+            "release on, your recordings go to the real archive.",
+        )
+    if mine.is_prerelease:
+        return Notice(
+            "recommended",
+            f"Beta {release.label} is available",
+            f"A newer beta than yours ({_label(mine)}) is out with fixes. Please update, so "
+            "that what you test and report is the latest build.",
+        )
+    if (new.major, new.minor) == (mine.major, mine.minor):
+        return Notice(
+            "recommended",
+            f"Version {release.label} fixes bugs",
+            f"It fixes problems found in {_label(mine)}. Updating is recommended.",
+        )
+    return Notice(
+        "info",
+        f"Version {release.label} is available",
+        f"It has new features since {_label(mine)}. See what's new on the download page.",
+    )
 
 
 def fetch_releases(timeout_s: float = 10.0) -> list[dict[str, Any]]:

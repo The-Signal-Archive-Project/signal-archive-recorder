@@ -46,7 +46,13 @@ from signal_archive_recorder.sources.wsjtx.listener import SETUP_HELP
 from signal_archive_recorder.ui.autostart import Autostart
 from signal_archive_recorder.ui.worker import in_background
 from signal_archive_recorder.upload.consent import CONSENT_TEXT
-from signal_archive_recorder.upload.hub import DEFAULT_REPO, Identity, check_token
+from signal_archive_recorder.upload.hub import (
+    BETA_NOTE,
+    DEFAULT_REPO,
+    TEST_REPO,
+    Identity,
+    check_token,
+)
 from signal_archive_recorder.upload.token import Token
 
 log = logging.getLogger(__name__)
@@ -86,6 +92,10 @@ class TermsPage(QWizardPage):
             self.agree.setChecked(True)
             self.agree.setText("You've already agreed to these terms")
         layout = QVBoxLayout(self)
+        if wizard.env.repo_id == TEST_REPO:
+            beta = _label(f"<b>Beta:</b> {BETA_NOTE}")
+            beta.setStyleSheet("background: #fff4cc; color: #3a2e00; padding: 6px;")
+            layout.addWidget(beta)
         layout.addWidget(text)
         layout.addWidget(self.agree)
 

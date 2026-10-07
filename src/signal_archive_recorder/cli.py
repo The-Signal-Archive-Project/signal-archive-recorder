@@ -60,9 +60,21 @@ from signal_archive_recorder.recorder import RunSummary
 from signal_archive_recorder.session.cleanup import cleanup
 from signal_archive_recorder.session.storage import SessionDir, SessionStorage
 from signal_archive_recorder.station import Station
-from signal_archive_recorder.updates import Release, UpdateChecker, fetch_releases, newest
+from signal_archive_recorder.updates import (
+    Release,
+    UpdateChecker,
+    fetch_releases,
+    newest,
+    notice,
+)
 from signal_archive_recorder.upload.consent import CONSENT_TEXT, ConsentStore, NoConsentError
-from signal_archive_recorder.upload.hub import DEFAULT_REPO, HfHub, Hub, HubError, check_token
+from signal_archive_recorder.upload.hub import (
+    PRODUCTION_REPO,
+    HfHub,
+    Hub,
+    HubError,
+    check_token,
+)
 from signal_archive_recorder.upload.queue import (
     NotLoggedInError,
     Uploader,
@@ -216,7 +228,8 @@ def cmd_record(args: argparse.Namespace) -> int:
     if config.check_updates:
 
         def tell(release: Release) -> None:
-            print(f"Version {release.label} is available: {release.url}", flush=True)
+            n = notice(release)
+            print(f"{n.title}. {n.text}\n  {release.url}", flush=True)
 
         updates = make_update_checker(tell)
         updates.start()
@@ -365,7 +378,8 @@ def cmd_check_update(args: argparse.Namespace) -> int:
     if release is None:
         print(f"Signal Archive Recorder {__version__} is the newest version.")
     else:
-        print(f"Version {release.label} is available (you have {__version__}): {release.url}")
+        n = notice(release)
+        print(f"{n.title}. {n.text}\n  {release.url}")
     return 0
 
 
@@ -487,8 +501,8 @@ def cmd_remove_chunk(args: argparse.Namespace) -> int:
 
 
 def _repo_note(config: RecorderConfig) -> None:
-    if config.upload.repo != DEFAULT_REPO:
-        print(f"(uploading to the TEST repository {config.upload.repo}, not {DEFAULT_REPO})")
+    if config.upload.repo != PRODUCTION_REPO:
+        print(f"(uploading to the TEST repository {config.upload.repo}, not {PRODUCTION_REPO})")
 
 
 def cmd_upload(args: argparse.Namespace) -> int:

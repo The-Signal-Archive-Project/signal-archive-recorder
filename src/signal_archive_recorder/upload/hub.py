@@ -17,7 +17,27 @@ from typing import Any, Protocol
 
 from signal_archive_recorder.upload.token import Token
 
-DEFAULT_REPO = "signal-archive-project/signal-archive-intake"
+PRODUCTION_REPO = "signal-archive-project/signal-archive-intake"
+TEST_REPO = "signal-archive-project/signal-archive-intake-test"
+
+
+def default_repo(version: str | None = None) -> str:
+    """Where uploads go unless the config says otherwise: pre-releases (betas, release
+    candidates) upload to the test dataset, releases to the real one. Upgrading from a
+    beta to the release therefore moves a tester's uploads over with no config edit."""
+    from packaging.version import Version
+
+    from signal_archive_recorder import __version__
+
+    return TEST_REPO if Version(version or __version__).is_prerelease else PRODUCTION_REPO
+
+
+DEFAULT_REPO = default_repo()
+BETA_NOTE = (
+    "This is a beta: your recordings go to the TEST dataset "
+    f"({TEST_REPO}), which checks that uploading works and may be wiped. "
+    "From the first full release, recordings go to the real archive."
+)
 # What a session upload may contain, relative to the session folder.
 ALLOW_PATTERNS = ("session.json", "recordings/*.flac", "recordings/*.meta.json", "labels/*")
 IGNORE_PATTERNS = ("local/*", "*.partial", "*.tmp", "*.corrupt", "*.crashed", "*.unrecoverable",

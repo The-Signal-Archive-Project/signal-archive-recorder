@@ -39,7 +39,7 @@ interval_s = 600
 # servers = ["pool.ntp.org", "time.cloudflare.com", "time.google.com"]
 
 [upload]
-repo = "signal-archive-project/signal-archive-intake"
+# repo = "signal-archive-project/signal-archive-intake"   # default: test dataset for betas
 schedule = "manual"          # manual, while_recording or overnight
 overnight_window = "01:00-06:00"   # local time, for schedule = "overnight"
 max_mbps = 0                 # average upload cap in megabits/s; 0 = no cap
@@ -59,6 +59,7 @@ from signal_archive_recorder.audio.channels import Keep
 from signal_archive_recorder.audio.format import SampleFormat
 from signal_archive_recorder.clockmon.monitor import DEFAULT_SERVERS
 from signal_archive_recorder.metadata.settings import StationSettings
+from signal_archive_recorder.upload.hub import DEFAULT_REPO
 from signal_archive_recorder.upload.service import Window
 
 
@@ -98,7 +99,7 @@ class ClockConfig:
 
 @dataclass(frozen=True)
 class UploadConfig:
-    repo: str = "signal-archive-project/signal-archive-intake"
+    repo: str = DEFAULT_REPO  # test dataset for betas, the real one for releases
     require_decoder: bool = True
     schedule: str = "manual"
     overnight_window: str = "01:00-06:00"

@@ -4,6 +4,12 @@ All notable changes to Signal Archive Recorder. Versions follow [semantic versio
 
 ## [Unreleased]
 
+### Testing
+- **Betas upload to the test dataset** (`signal-archive-intake-test`), and releases to the real archive. Setup no longer writes the upload repository into the config, so upgrading from a beta to the release moves uploads over by itself. Setup tells beta testers where their recordings go.
+
+### Updates
+- **Update notices fit your situation:** on a beta when the release comes out, you're strongly asked to switch (it's highlighted and stays up); a newer beta, or a bug-fix release, is recommended; a release with new features is announced.
+
 ### Fixed
 - The `.deb`'s file name uses `.` where its version has `~` (`…_0.3.0.beta1_amd64.deb`), matching what GitHub shows on the release page.
 

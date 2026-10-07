@@ -269,7 +269,7 @@ def test_check_update_command(
 ) -> None:
     monkeypatch.setattr(cli, "fetch_update_list", lambda: [*RELEASES, rel("v9.0.0")])
     assert cli.main(["check-update"]) == 0
-    assert "Version 9.0.0 is available" in capsys.readouterr().out
+    assert "9.0.0" in capsys.readouterr().out
     monkeypatch.setattr(cli, "fetch_update_list", lambda: [])
     cli.main(["check-update"])
     assert "is the newest version" in capsys.readouterr().out
@@ -291,7 +291,7 @@ def test_window_and_tray_show_a_new_version(qtbot: Any, tmp_path: Path) -> None:
     fake.update = newest([rel("v9.0.0")], "0.1.0")  # type: ignore[attr-defined]
     window.refresh()
     assert not window.update_banner.isHidden()
-    assert "9.0.0 is available" in window.update_banner.text()
+    assert "9.0.0" in window.update_banner.text()
 
 
 def test_controller_runs_the_update_checker(tmp_path: Path) -> None:
@@ -319,3 +319,88 @@ def test_controller_runs_the_update_checker(tmp_path: Path) -> None:
         assert started == [True] and controller.update == found
     finally:
         controller.stop()
+
+
+# -- notices worded for where the operator is ----------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("current", "tag", "level", "words"),
+    [
+        ("0.3.0b1", "v0.3.0", "important", "please switch from the beta"),
+        ("0.3.0rc2", "v0.3.0", "important", "betas aren't supported"),
+        ("0.3.0b1", "v0.3.0-beta.2", "recommended", "newer beta"),
+        ("0.3.0b2", "v0.3.0-rc.1", "recommended", "newer beta"),
+        ("0.3.0", "v0.3.1", "recommended", "fixes"),
+        ("0.3.0", "v0.4.0", "info", "new features"),
+        ("0.3.0", "v1.0.0", "info", "new features"),
+    ],
+)
+def test_update_notices(current: str, tag: str, level: str, words: str) -> None:
+    from signal_archive_recorder.updates import notice
+
+    release = newest([rel(tag)], current)
+    assert release is not None
+    n = notice(release, current)
+    assert n.level == level and words in f"{n.title} {n.text}"
+
+
+def test_moving_from_beta_to_release_mentions_the_real_archive() -> None:
+    from signal_archive_recorder.updates import notice
+
+    release = newest([rel("v0.3.0")], "0.3.0b3")
+    assert release is not None
+    assert "real archive" in notice(release, "0.3.0b3").text
+
+
+def test_banner_colour_follows_the_level(
+    qtbot: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from signal_archive_recorder import updates
+    from signal_archive_recorder.ui import app
+    from signal_archive_recorder.ui.app import NOTICE_COLOURS, StatusWindow
+    from tests.unit.test_stage9c import FakeController
+
+    monkeypatch.setattr(app, "notice", lambda r: updates.notice(r, "0.3.0b1"))
+    fake = FakeController()
+    window = StatusWindow(fake, recordings=tmp_path, settings=tmp_path / "r.toml")
+    qtbot.addWidget(window)
+    fake.update = newest([rel("v0.3.0")], "0.3.0b1")  # type: ignore[attr-defined]
+    window.refresh()
+    assert NOTICE_COLOURS["important"] in window.update_banner.styleSheet()
+    assert "please switch from the beta" in window.update_banner.text()
+
+
+# -- betas upload to the test dataset ---------------------------------------------------------
+
+
+def test_betas_upload_to_the_test_dataset() -> None:
+    from signal_archive_recorder.upload.hub import PRODUCTION_REPO, TEST_REPO, default_repo
+
+    assert default_repo("0.3.0b1") == TEST_REPO
+    assert default_repo("0.3.0rc1") == TEST_REPO
+    assert default_repo("0.3.0") == PRODUCTION_REPO
+    assert default_repo("1.2.3") == PRODUCTION_REPO
+
+
+def test_setup_leaves_the_repo_to_the_version(tmp_path: Path) -> None:
+    """Configs written by setup don't pin a repo, so upgrading to a release moves uploads
+    from the test dataset to the real one by itself."""
+    from signal_archive_recorder.firstrun.config_writer import SetupChoices, render
+
+    text = render(SetupChoices(device="x"))
+    assert not any(line.startswith("repo") for line in text.splitlines())
+    (tmp_path / "r.toml").write_text(text)
+    from signal_archive_recorder.upload.hub import DEFAULT_REPO
+
+    assert load_config(tmp_path / "r.toml").upload.repo == DEFAULT_REPO
+
+
+def test_beta_setup_says_where_recordings_go(tmp_path: Path) -> None:
+    from signal_archive_recorder.upload.hub import TEST_REPO
+
+    script = Script(["I agree", "1", "", "", ""], [TOKEN])
+    wizard = make_wizard(tmp_path, script)
+    wizard.repo_id = TEST_REPO
+    wizard.run(tmp_path / "r.toml")
+    assert "TEST dataset" in script.text

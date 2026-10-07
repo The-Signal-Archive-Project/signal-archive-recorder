@@ -46,7 +46,14 @@ from signal_archive_recorder.metadata.settings import normalise_callsign, normal
 from signal_archive_recorder.sources.wsjtx import messages as m
 from signal_archive_recorder.sources.wsjtx.listener import SETUP_HELP
 from signal_archive_recorder.upload.consent import CONSENT_TEXT, ConsentStore
-from signal_archive_recorder.upload.hub import DEFAULT_REPO, Hub, HubError, check_token
+from signal_archive_recorder.upload.hub import (
+    BETA_NOTE,
+    DEFAULT_REPO,
+    TEST_REPO,
+    Hub,
+    HubError,
+    check_token,
+)
 from signal_archive_recorder.upload.token import KeyringUnavailableError, Token, TokenStore
 
 TOKEN_HELP = f"""\
@@ -228,6 +235,8 @@ class Wizard:
         p = self.prompt
         current = self.consent.load()
         p.say("Step 1 of 6: contribution terms")
+        if self.repo_id == TEST_REPO:
+            p.say(f"  {BETA_NOTE}")
         if current is not None and current.is_current():
             p.say("  You've already agreed to the current terms.")
             p.say()

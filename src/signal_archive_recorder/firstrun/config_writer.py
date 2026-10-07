@@ -74,7 +74,8 @@ enabled = true               # checks the computer clock against NTP every 10 mi
 interval_s = 600
 
 [upload]
-repo = "signal-archive-project/signal-archive-intake"
+# repo = "..."               # where uploads go; default: the test dataset for betas,
+                             # the real archive for releases (so leave it unset)
 schedule = "manual"          # manual, while_recording or overnight (uploads in the background)
 overnight_window = "01:00-06:00"   # local time, for schedule = "overnight"
 max_mbps = 0                 # average upload cap in megabits/s; 0 = no cap
