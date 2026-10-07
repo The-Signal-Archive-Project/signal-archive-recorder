@@ -154,9 +154,14 @@ def main(setup: Path) -> int:
     gui = subprocess.Popen([str(GUI), "tray", "--config", str(gui_config)], env=gui_env)
     log = work / "logs" / "recorder.log"
     wait_for(lambda: log.exists() and "recording started" in log.read_text(), "the app to record")
-    second = subprocess.run(
-        [str(GUI), "tray", "--config", str(gui_config)], env=gui_env, timeout=60
-    )
+    second = subprocess.Popen([str(GUI), "tray", "--config", str(gui_config)], env=gui_env)
+    try:
+        second.wait(timeout=60)
+    except subprocess.TimeoutExpired:
+        second.kill()
+        gui.kill()
+        print(log.read_text(), flush=True)
+        raise SystemExit("FAILED: the second start didn't exit (log above)") from None
     check(
         second.returncode == 0 and "already running" in log.read_text(),
         "a second start shows the running app instead",
