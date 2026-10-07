@@ -1,0 +1,99 @@
+name: Linux packages
+
+# Builds the .deb, installs it on each supported Debian/Ubuntu release and
+# smoke-tests it; builds the AUR package in Arch and smoke-tests that too. On a
+# published release, the .deb is attached to it.
+on:
+  pull_request:
+    paths:
+      - "installer/**"
+      - "src/**"
+      - "pyproject.toml"
+      - ".github/workflows/linux-packages.yml"
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deb:
+    name: build the .deb
+    runs-on: ubuntu-22.04  # the oldest supported release: its C library suits every newer one
+    permissions:
+      contents: write  # attach the .deb to a release
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install ".[gui]" "pyinstaller>=6.10"
+      - run: python installer/linux/build_deb.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deb
+          path: dist/*.deb
+      - name: Attach to the release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.event.release.tag_name }}" dist/*.deb --clobber
+
+  deb-test:
+    name: test the .deb (${{ matrix.image }})
+    needs: deb
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ["debian:12", "debian:13", "ubuntu:22.04", "ubuntu:24.04"]
+    container: ${{ matrix.image }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          name: deb
+          path: dist
+      - name: Install (apt resolves the dependencies)
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends python3 ./dist/*.deb
+      - name: Smoke test
+        run: python3 installer/linux/smoke_test.py --expect-version "$(python3 -c 'import re;print(re.search(r"^version = \"(.+)\"", open("pyproject.toml").read(), re.M)[1])')"
+      - name: Remove cleanly
+        run: apt-get remove -y signal-archive-recorder && test ! -e /usr/bin/signal-archive-recorder
+
+  aur:
+    name: build and test the AUR package (Arch)
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    steps:
+      - name: Tools and the dependencies in Arch's own repositories
+        run: |
+          pacman -Syu --noconfirm --needed base-devel git sudo python-build python-installer \
+            python-hatchling python-wheel python-huggingface-hub python-jsonschema python-keyring \
+            python-numpy python-packaging python-referencing python-soundfile python-cffi \
+            portaudio pyside6
+          useradd -m builder
+          echo "builder ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/builder
+      - uses: actions/checkout@v5
+      - name: Dependencies from the AUR
+        run: |
+          for dep in python-sounddevice python-ntplib; do
+            sudo -u builder git clone "https://aur.archlinux.org/$dep.git" "/home/builder/$dep"
+            (cd "/home/builder/$dep" && sudo -u builder makepkg -si --noconfirm)
+          done
+      - name: Build the package from this commit's source package
+        run: |
+          python -m build --sdist --no-isolation --outdir /home/builder/pkg .
+          cp installer/aur/PKGBUILD /home/builder/pkg/
+          cd /home/builder/pkg
+          version=$(sed -n 's/^pkgver=//p' PKGBUILD)
+          sed -i "s|^source=.*|source=(\"signal_archive_recorder-$version.tar.gz\")|" PKGBUILD
+          chown -R builder /home/builder/pkg
+          sudo -u builder makepkg -si --noconfirm
+          sudo -u builder makepkg --printsrcinfo > /dev/null
+      - name: Smoke test
+        run: python3 installer/linux/smoke_test.py --expect-version "$(sed -n 's/^pkgver=//p' installer/aur/PKGBUILD)"

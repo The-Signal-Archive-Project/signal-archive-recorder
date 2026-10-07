@@ -106,7 +106,7 @@ def main() -> int:
             str(BUILD / "dist"),
             "--workpath",
             str(BUILD / "work"),
-            str(HERE / "signal-archive-recorder.spec"),
+            str(ROOT / "installer" / "pyinstaller" / "signal-archive-recorder.spec"),
         ],
         check=True,
     )

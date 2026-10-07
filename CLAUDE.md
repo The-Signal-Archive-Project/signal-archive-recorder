@@ -450,8 +450,8 @@ Before adding modes, FT8 through WSJT-X has to work on many stations: different 
 - The intake validator bot ships with H4.
 
 **H2: Windows installer (done)**
+- `installer/pyinstaller/` (shared with the .deb since H3): `signal-archive-recorder.spec` builds one folder (not one file, so the LGPL DLLs stay replaceable, it starts faster and antivirus tools trust it more). Two programs share it: `SignalArchiveRecorder` (windowed on Windows; no arguments, or only options, start the tray, and a command runs as given, via `gui.desktop_args`) and `signal-archive-recorder` (console, the CLI).
 - `installer/windows/`:
-  - `signal-archive-recorder.spec`: PyInstaller, one folder (not one file, so the LGPL DLLs stay replaceable, it starts faster and antivirus tools trust it more). Two programs share it: `SignalArchiveRecorder.exe` (windowed; no arguments starts the tray) and `signal-archive-recorder.exe` (console, the CLI).
   - `signal-archive-recorder.iss`: Inno Setup 6. A per-user install (`PrivilegesRequired=lowest`), a fixed `AppId` (never change it: upgrades depend on it), the Start menu, start-at-login and desktop tasks, and `AppMutex` matching `ui/app.py` `WINDOWS_MUTEX`. The uninstall dialog shows the owner's options and calls `forget`.
   - `build.py`: version resource, PyInstaller, license collection (every bundled distribution's license files, under `licenses/`), then ISCC.
   - `smoke_test.py`: install silently, check the packaged app (version, keyring backend `WinVaultKeyring`, PySide6, PortAudio/libsndfile), record a session in standby driven by the fake emitter, run the desktop app offscreen plus a second start, `forget --dry-run`, a silent uninstall that keeps the recordings.
@@ -461,10 +461,15 @@ Before adding modes, FT8 through WSJT-X has to work on many stations: different 
 - The icon is drawn by `tools/make_icon.py` (Qt, offscreen) into `data/icon.png` and `installer/windows/icon.ico`.
 - Checked locally: the spec builds on Linux too, and the frozen CLI and desktop app run (package data, metadata, PortAudio, keyring, Qt offscreen; a session recorded and saved on SIGTERM). `tests/unit/test_installer.py` keeps names, mutex, registry value and `forget` options in step between the installer and the app.
 
-**H3: Linux packages.**
-- **AUR:** `signal-archive-recorder`, using Arch's packages (all in `extra` except `python-sounddevice` and `python-ntplib`, which come from the AUR).
-- **.deb:** self-contained under `/opt` (Debian and Ubuntu ship older Python libraries), depending on `libportaudio2`, `libsndfile1` and Qt's system libraries. Attached to each release and CI-tested on Debian 12/13 and Ubuntu 22.04/24.04.
-- Both get a desktop entry and an icon.
+**H3: Linux packages (done)**
+- **AUR** (`installer/aur/`): `PKGBUILD` is the template. It builds the wheel from the release's sdist with Arch's own packages; everything is in `extra` except `python-sounddevice` and `python-ntplib`, which come from the AUR. Both are maintained, and the `signal-archive-recorder` name was free on 2026-10-07. pacman sorts `0.3.0b1 < 0.3.0rc1 < 0.3.0`, so `pkgver` uses the PEP 440 spelling. `tools/release.py` keeps `pkgver`/`_tag` current. After a release is published, `installer/aur/update.py --to <AUR clone>` fills in the sha256 and writes `PKGBUILD` and `.SRCINFO`, which the owner pushes from their AUR account. Built locally with `makepkg` too.
+- **.deb** (`installer/linux/build_deb.py`): the PyInstaller folder under `/opt/signal-archive-recorder`, with `/usr/bin` links, a desktop entry, the icon and `copyright`. It's self-contained because Ubuntu 22.04 has Python 3.10. It's built on Ubuntu 22.04 so its glibc suits newer releases, and depends on `libportaudio2` and Qt's X/GL libraries. Versions sort betas first (`0.3.0~beta1`).
+- `installer/linux/signal-archive-recorder.desktop` (`Exec=signal-archive-recorder-gui`, category `HamRadio`) is used by both packages.
+- `installer/linux/smoke_test.py` uses only the standard library and runs next to an installed package. It checks the version and the libraries (diagnostics), then a standby → record → saved session (WSJT-X played by replaying our own captured datagrams), then the desktop app offscreen with a second start and SIGTERM, then `forget --dry-run`.
+- `.github/workflows/linux-packages.yml` builds the .deb, then installs and smoke-tests it in Debian 12 and 13 and Ubuntu 22.04 and 24.04 containers (and removes it). It also builds and installs the AUR package in an Arch container (AUR dependencies included) and smoke-tests it. On a published release it attaches the .deb.
+- **Never bundle `libstdc++`/`libgcc_s` on Linux** (the spec filters them out; the .deb depends on the system's). The first CI run failed on Debian 13 and Ubuntu 24.04 because the bundled Ubuntu 22.04 runtime was older than what the system's PortAudio → JACK needs.
+- A bug the Linux smoke test found: the packaged desktop program treated `--config FILE` (options with no command) as the terminal `record`. Fixed with `gui.desktop_args`.
+- **Open:** the .deb's `Maintainer` field holds the project URL until there's a project email (perhaps the groups.io address).
 
 **H4: the testing round.** `TESTING.md` for testers, GitHub issue templates (setup details plus the diagnostics zip), a setups-covered matrix, an announcement text, and a **v0.3.0-beta.1** pre-release.
 

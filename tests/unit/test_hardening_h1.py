@@ -393,6 +393,10 @@ def test_gui_entry_point_runs_tray(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(sys, "argv", ["signal-archive-recorder-gui", "--config", "x.toml"])
     assert gui.main() == 0
     assert seen == [["tray", "--config", "x.toml"]]
+    assert gui.desktop_args([]) == ["tray"]
+    assert gui.desktop_args(["forget", "--yes", "--token"]) == ["forget", "--yes", "--token"]
+    assert gui.desktop_args(["--version"]) == ["--version"]
+    assert gui.desktop_args(["tray", "--config", "y"]) == ["tray", "--config", "y"]
 
 
 def test_desktop_app_saves_the_session_on_sigterm(tmp_path: Path) -> None:

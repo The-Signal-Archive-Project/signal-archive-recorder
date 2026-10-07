@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Signal Archive Recorder
+GenericName=Radio signal recorder
+Comment=Record receive audio beside WSJT-X for the Signal Archive Project
+Exec=signal-archive-recorder-gui
+Icon=signal-archive-recorder
+Terminal=false
+Categories=HamRadio;Audio;Network;
+Keywords=ham;radio;FT8;FT4;WSJT-X;recorder;dataset;
+StartupNotify=false

@@ -1,0 +1,49 @@
+# SPDX-License-Identifier: MPL-2.0
+# Template for the AUR package. tools/release.py keeps pkgver and _tag in step;
+# installer/aur/update.py fills in the checksum of the published release and
+# writes the PKGBUILD and .SRCINFO to push to the AUR.
+# Maintainer: The Signal Archive Project <https://github.com/The-Signal-Archive-Project>
+pkgname=signal-archive-recorder
+pkgver=0.2.0
+pkgrel=1
+_tag=v0.2.0
+pkgdesc="Records ham radio receive audio beside WSJT-X for the Signal Archive Project's open dataset"
+arch=('any')
+url="https://github.com/The-Signal-Archive-Project/signal-archive-recorder"
+license=('MPL-2.0')
+depends=(
+  'python'
+  'python-huggingface-hub'
+  'python-jsonschema'
+  'python-keyring'
+  'python-ntplib'
+  'python-numpy'
+  'python-packaging'
+  'python-referencing'
+  'python-sounddevice'
+  'python-soundfile'
+  'pyside6'
+)
+makedepends=('python-build' 'python-installer' 'python-hatchling' 'python-wheel')
+optdepends=(
+  'gnome-keyring: keeps the Hugging Face token (or another Secret Service, such as KWallet)'
+  'wsjtx: the decoder the recorder follows'
+)
+source=("$url/releases/download/$_tag/signal_archive_recorder-$pkgver.tar.gz")
+sha256sums=('SKIP')
+
+build() {
+  cd "signal_archive_recorder-$pkgver"
+  python -m build --wheel --no-isolation
+}
+
+package() {
+  cd "signal_archive_recorder-$pkgver"
+  python -m installer --destdir="$pkgdir" dist/*.whl
+  install -Dm644 installer/linux/signal-archive-recorder.desktop \
+    "$pkgdir/usr/share/applications/signal-archive-recorder.desktop"
+  install -Dm644 src/signal_archive_recorder/data/icon.png \
+    "$pkgdir/usr/share/icons/hicolor/256x256/apps/signal-archive-recorder.png"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm644 NOTICE "$pkgdir/usr/share/licenses/$pkgname/NOTICE"
+}

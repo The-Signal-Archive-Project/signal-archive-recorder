@@ -4,8 +4,9 @@
 # https://mozilla.org/MPL/2.0/.
 """The desktop app's entry point (`signal-archive-recorder-gui`, and the packaged app).
 
-It is `signal-archive-recorder tray` with any extra arguments passed on. On Windows
-it is installed as a windowed program, so no console window opens.
+With no arguments, or only options (`--config FILE`), it is `signal-archive-recorder
+tray`. A command (`forget --yes`, `--version`) runs as given, so the Windows
+uninstaller can call the windowed program without a console appearing.
 """
 
 from __future__ import annotations
@@ -15,8 +16,14 @@ import sys
 from signal_archive_recorder import cli
 
 
+def desktop_args(argv: list[str]) -> list[str]:
+    if argv and (argv[0] in cli.command_names() or argv[0] in ("--version", "-h", "--help")):
+        return argv
+    return ["tray", *argv]
+
+
 def main() -> int:
-    return cli.main(["tray", *sys.argv[1:]])
+    return cli.main(desktop_args(sys.argv[1:]))
 
 
 if __name__ == "__main__":

@@ -4,6 +4,13 @@ All notable changes to Signal Archive Recorder. Versions follow [semantic versio
 
 ## [Unreleased]
 
+### Linux packages
+- **Debian/Ubuntu `.deb`**: a self-contained app (its own Python) for Debian 12+ and Ubuntu 22.04+, with a menu entry, icon and `signal-archive-recorder`/`signal-archive-recorder-gui` commands. Attached to each release, and installed, smoke-tested and removed on all four releases in CI.
+- **Arch Linux (AUR)**: `signal-archive-recorder`, built from the release's source package with Arch's own Python packages, and tested in an Arch container in CI. `installer/aur/update.py` prepares each release's update for the AUR.
+
+### Fixed
+- The packaged desktop program started the terminal recorder when given only options (such as `--config FILE`); it now starts the desktop app.
+
 ### Project
 - **`tools/release.py`** cuts releases by SemVer: `next`, `prepare {major|minor|patch|pre|final} [--pre beta|rc]` (version, changelog, README pins, a signed-off commit and a PR) and `publish` (tag, build, GitHub release). See CLAUDE.md, "Versions".
 
