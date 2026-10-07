@@ -11,8 +11,8 @@ Thank you for helping! Signal Archive Recorder records exactly what your receive
 Get the newest beta from the **[latest release](https://github.com/The-Signal-Archive-Project/signal-archive-recorder/releases/latest)**: its title says which beta it is.
 
 - **Windows:** download `SignalArchiveRecorder-…-Setup.exe` and run it. The beta isn't code-signed yet, so Windows may say "Windows protected your PC": choose **More info → Run anyway**. If your antivirus objects, please tell us which antivirus it is.
-- **Debian / Ubuntu:** download the `.deb` file, then run `sudo apt install ./signal-archive-recorder_*_amd64.deb` in the folder you saved it to. Start it from your applications menu.
-- **Arch Linux:** `yay -S signal-archive-recorder`, or use another AUR helper.
+- **Debian / Ubuntu:** add our package repository's **beta** channel, which also keeps you up to date with each new beta. The commands are on [our Debian/Ubuntu page](https://the-signal-archive-project.github.io/signal-archive-recorder/) under "Beta (testers)". Or download the `.deb` file from the release and run `sudo apt install ./signal-archive-recorder_*_amd64.deb` in the folder you saved it to. Start it from your applications menu.
+- **Arch Linux:** the AUR package is waiting for AUR registrations to reopen. For now: `sudo pacman -S --needed python-pipx portaudio`, then `pipx install "signal-archive-recorder[gui] @ git+https://github.com/The-Signal-Archive-Project/signal-archive-recorder@v0.3.0-beta.2"`, then run `signal-archive-recorder-gui`.
 
 ## 2. Set it up
 
@@ -63,7 +63,7 @@ If something went wrong, choose **Report a problem…** in the tray menu or the 
 ## Uninstalling
 
 - **Windows:** Settings → Apps → Signal Archive Recorder → Uninstall. It keeps your recordings and settings unless you tick **Remove everything** (which warns you first).
-- **Debian / Ubuntu:** `sudo apt remove signal-archive-recorder`. **Arch:** `sudo pacman -R signal-archive-recorder`.
+- **Debian / Ubuntu:** `sudo apt remove signal-archive-recorder`. **Arch (pipx):** `pipx uninstall signal-archive-recorder`.
 - On Linux, to also delete recordings and settings, run `signal-archive-recorder forget --everything` *before* uninstalling.
 
 Thank you, and 73!

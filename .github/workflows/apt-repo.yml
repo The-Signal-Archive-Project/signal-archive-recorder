@@ -1,0 +1,130 @@
+name: APT repository
+
+# Rebuilds the signed APT repository on GitHub Pages from the releases' .deb files,
+# tests it with apt on Debian and Ubuntu, publishes it, then installs from the live
+# site exactly as users do. Runs after "Linux packages" has attached a release's .deb,
+# by hand, and (build and test only, no publishing) on PRs that change it.
+on:
+  workflow_run:
+    workflows: ["Linux packages"]
+    types: [completed]
+  pull_request:
+    paths:
+      - "installer/apt/**"
+      - ".github/workflows/apt-repo.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: apt-repository
+  cancel-in-progress: false
+
+env:
+  KEY_ID: 9EC64E0C16932FCCC381381C38FA930D4522E702
+  SITE: https://the-signal-archive-project.github.io/signal-archive-recorder
+
+jobs:
+  build:
+    name: build and sign the repository
+    if: >-
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.event == 'release' && github.event.workflow_run.conclusion == 'success')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: Import the signing key
+        env:
+          APT_SIGNING_KEY: ${{ secrets.APT_SIGNING_KEY }}
+        run: |
+          test -n "$APT_SIGNING_KEY" || { echo "the APT_SIGNING_KEY secret is missing"; exit 1; }
+          echo "$APT_SIGNING_KEY" | gpg --batch --import
+          gpg --list-secret-keys "$KEY_ID"
+      - name: Build and sign
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python installer/apt/build_repo.py --site _site --sign-with "$KEY_ID"
+      - name: Check the signatures against the published public key
+        run: |
+          gpg --batch --no-default-keyring --keyring ./check.kbx --import installer/apt/signal-archive.asc
+          for suite in stable beta; do
+            gpg --no-default-keyring --keyring ./check.kbx --verify "_site/dists/$suite/InRelease"
+            gpg --no-default-keyring --keyring ./check.kbx --verify "_site/dists/$suite/Release.gpg" "_site/dists/$suite/Release"
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apt-site
+          path: _site
+          include-hidden-files: true
+      - uses: actions/upload-pages-artifact@v3
+        if: github.event_name != 'pull_request'
+        with:
+          path: _site
+
+  test:
+    name: install with apt (${{ matrix.image }})
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ["debian:12", "debian:13", "ubuntu:22.04", "ubuntu:24.04"]
+    container: ${{ matrix.image }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: apt-site
+          path: /srv/apt
+      - name: Add the repository (from disk) and install from the beta channel
+        run: |
+          install -d -m 0755 /etc/apt/keyrings
+          cp /srv/apt/signal-archive.asc /etc/apt/keyrings/
+          echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/signal-archive.asc] file:/srv/apt beta main" \
+            > /etc/apt/sources.list.d/signal-archive.list
+          apt-get -o Acquire::Retries=3 update
+          DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=3 install -y signal-archive-recorder
+          signal-archive-recorder --version
+      - name: The stable channel is valid too
+        run: |
+          echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/signal-archive.asc] file:/srv/apt stable main" \
+            > /etc/apt/sources.list.d/signal-archive.list
+          apt-get update
+
+  deploy:
+    name: publish to GitHub Pages
+    needs: [build, test]
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
+
+  live:
+    name: install from the live site, as users do
+    needs: deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    container: ubuntu:24.04
+    steps:
+      - name: The published instructions, word for word
+        run: |
+          apt-get update && apt-get install -y --no-install-recommends curl ca-certificates sudo
+          sudo install -d -m 0755 /etc/apt/keyrings
+          curl -fsSL "$SITE/signal-archive.asc" | sudo tee /etc/apt/keyrings/signal-archive.asc > /dev/null
+          echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/signal-archive.asc] $SITE beta main" \
+            | sudo tee /etc/apt/sources.list.d/signal-archive.list
+          sudo apt update && DEBIAN_FRONTEND=noninteractive sudo -E apt install -y signal-archive-recorder
+          signal-archive-recorder --version
