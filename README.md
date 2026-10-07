@@ -4,6 +4,8 @@ Station-side recorder for the **Signal Archive Project**. It captures bit-exact 
 
 > **Status:** v0.2.0 (alpha). It records, labels and uploads FT8/FT4 sessions, with a desktop app (window and tray icon) or from the terminal. Expect changes before 1.0; see the [changelog](CHANGELOG.md). The build plan is in [CLAUDE.md](CLAUDE.md).
 
+> **Beta testers wanted!** If you run WSJT-X or JTDX, see the **[tester guide](TESTING.md)**. It covers installing, what to try and how to report back.
+
 ## Principles
 
 - **Zero interference:** it only listens. It never takes exclusive control of your audio device, serial port or CAT, and never sends commands to WSJT-X or your rig.
@@ -140,6 +142,13 @@ Closing the window keeps recording in the tray; **Quit** in the tray menu stops 
 ### No radio?
 
 Set `[audio] file = "something.wav"` to play a 16- or 24-bit WAV as if it were a sound card (with `[recording] start = "always"`, or a WSJT-X stand-in so it knows when to record). With a clone of this repository, `python tools/fake_wsjtx_emitter.py` stands in for WSJT-X.
+
+## Community
+
+- **Questions, station reports and release news:** the groups.io group, <https://groups.io/g/signal-archive>. You can also post by email to `main@signal-archive.groups.io`.
+- **Live chat:** our Discord, <https://discord.gg/d8uSd2ThZ>.
+- **Bugs and test reports:** [GitHub Issues](https://github.com/The-Signal-Archive-Project/signal-archive-recorder/issues/new/choose). No GitHub account? Post to the group instead.
+- **Security problems:** please report them privately ([SECURITY.md](SECURITY.md)).
 
 ## Development
 

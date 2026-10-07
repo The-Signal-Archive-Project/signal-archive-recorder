@@ -1,0 +1,45 @@
+name: Bug report
+description: Something is broken or behaves wrongly.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please attach the diagnostics file: in the recorder's window choose **Report a problem… → Save diagnostics**, then drag the zip into the last box. It contains no audio and no passwords, and your names are blanked out.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+  - type: textarea
+    id: steps
+    attributes:
+      label: How can we make it happen?
+      placeholder: |
+        1. Start WSJT-X on 20 m FT8
+        2. Start the recorder
+        3. …
+  - type: input
+    id: version
+    attributes:
+      label: Recorder version
+      description: Shown at the bottom of the status window, or run `signal-archive-recorder --version`.
+    validations:
+      required: true
+  - type: input
+    id: system
+    attributes:
+      label: Operating system, and how you installed it
+      placeholder: e.g. Windows 11, installer / Ubuntu 24.04, .deb
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics and screenshots
+      description: Drag the diagnostics zip here.

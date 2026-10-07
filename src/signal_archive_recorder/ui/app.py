@@ -52,8 +52,9 @@ from signal_archive_recorder.paths import config_dir
 from signal_archive_recorder.ui.autostart import Autostart
 from signal_archive_recorder.ui.controller import SessionRow
 from signal_archive_recorder.ui.health import CheckItem, HealthInputs, checklist, tray_state
+from signal_archive_recorder.ui.report import ReportDialog
 from signal_archive_recorder.ui.review_window import ReviewWindow
-from signal_archive_recorder.updates import notice
+from signal_archive_recorder.updates import display_version, notice
 
 log = logging.getLogger(__name__)
 
@@ -189,9 +190,8 @@ class StatusWindow(QWidget):
             buttons.addWidget(b)
         settings_button = QPushButton("Settings file")
         settings_button.clicked.connect(lambda: self._open(self._settings))
-        self.diagnostics_button = QPushButton("Save diagnostics...")
-        self.diagnostics_button.clicked.connect(self.save_diagnostics)
-        self.diagnostics_button.setEnabled(diagnostics is not None)
+        self.report_button = QPushButton("Report a problem...")
+        self.report_button.clicked.connect(self.open_report)
         self.autostart_box = QCheckBox("Start when I log in")
         if autostart is not None:
             self.autostart_box.setChecked(autostart.enabled())
@@ -199,7 +199,7 @@ class StatusWindow(QWidget):
         else:
             self.autostart_box.setEnabled(False)
         more = QHBoxLayout()
-        for w in (settings_button, self.diagnostics_button, self.autostart_box):
+        for w in (settings_button, self.report_button, self.autostart_box):
             more.addWidget(w)
         self.message = QLabel()
         self.message.setWordWrap(True)
@@ -216,6 +216,10 @@ class StatusWindow(QWidget):
         layout.addLayout(buttons)
         layout.addLayout(more)
         layout.addWidget(self.message)
+        self.version = QLabel(f"Version {display_version()}")
+        self.version.setStyleSheet("color: #8a8f98; font-size: 11px;")
+        layout.addWidget(self.version)
+        self.report: ReportDialog | None = None
 
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.refresh)
@@ -284,6 +288,14 @@ class StatusWindow(QWidget):
         self.review.raise_()
         self.review.activateWindow()
 
+    def open_report(self) -> None:
+        if self.report is None:
+            save = self.save_diagnostics if self._diagnostics is not None else None
+            self.report = ReportDialog(save, self)
+        self.report.show()
+        self.report.raise_()
+        self.report.activateWindow()
+
     def save_diagnostics(self) -> None:
         if self._diagnostics is None:
             return
@@ -331,9 +343,11 @@ class Tray:
         note.triggered.connect(self._mark)
         review = QAction("Review && upload...", menu)
         review.triggered.connect(window.open_review)
+        report = QAction("Report a problem...", menu)
+        report.triggered.connect(window.open_report)
         quit_action = QAction("Quit (saves the session)", menu)
         quit_action.triggered.connect(quit_app)
-        for action in (show, self.pause, note, review, quit_action):
+        for action in (show, self.pause, note, review, report, quit_action):
             menu.addAction(action)
         self._menu = menu
         self.icon.setContextMenu(menu)
