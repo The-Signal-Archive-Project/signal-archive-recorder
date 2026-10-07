@@ -146,7 +146,7 @@ Set `[audio] file = "something.wav"` to play a 16- or 24-bit WAV as if it were a
 ## Community
 
 - **Questions, station reports and release news:** the groups.io group, <https://groups.io/g/signal-archive>. You can also post by email to `main@signal-archive.groups.io`.
-- **Live chat:** our Discord, <https://discord.gg/d8uSd2ThZ>.
+- **Live chat:** our Discord, <https://discord.gg/R8g5F8BcAC>.
 - **Bugs and test reports:** [GitHub Issues](https://github.com/The-Signal-Archive-Project/signal-archive-recorder/issues/new/choose). No GitHub account? Post to the group instead.
 - **Security problems:** please report them privately ([SECURITY.md](SECURITY.md)).
 

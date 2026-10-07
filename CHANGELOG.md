@@ -4,6 +4,11 @@ All notable changes to Signal Archive Recorder. Versions follow [semantic versio
 
 ## [Unreleased]
 
+## [0.3.0-beta.2] - 2026-10-07
+
+### Fixed
+- **A beta never uploads to the real archive**, even if its settings name it (as 0.3.0-beta.1's setup wrote): it uses the test dataset. Beta 1 testers just install beta 2 over it.
+
 ### For testers
 - **Report a problem…** in the tray menu and the window: saves the diagnostics file, then opens the test-report or bug form, the groups.io group, or the community links. The window shows the version at the bottom.
 - **[TESTING.md](TESTING.md)**, a guide for beta testers (install, setup, what to try, how to report, known issues, uninstalling), and [docs/tested-setups.md](docs/tested-setups.md), the setups covered so far.
@@ -111,7 +116,8 @@ The first release. It records bit-exact receive audio from a ham station, labels
 - No GPL dependencies (enforced in CI); DCO sign-off on every commit.
 - CI on Linux and Windows with Python 3.11 and 3.14.
 
-[Unreleased]: https://github.com/The-Signal-Archive-Project/signal-archive-recorder/compare/v0.3.0-beta.1...HEAD
+[Unreleased]: https://github.com/The-Signal-Archive-Project/signal-archive-recorder/compare/v0.3.0-beta.2...HEAD
+[0.3.0-beta.2]: https://github.com/The-Signal-Archive-Project/signal-archive-recorder/compare/v0.3.0-beta.1...v0.3.0-beta.2
 [0.3.0-beta.1]: https://github.com/The-Signal-Archive-Project/signal-archive-recorder/compare/v0.2.0...v0.3.0-beta.1
 [0.2.0]: https://github.com/The-Signal-Archive-Project/signal-archive-recorder/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/The-Signal-Archive-Project/signal-archive-recorder/releases/tag/v0.1.0

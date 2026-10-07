@@ -12,6 +12,7 @@
     python tools/release.py prepare final            # 0.3.0-rc.1 -> 0.3.0
     python tools/release.py publish --notes notes.md # after the release PR is merged
     python tools/release.py publish --draft          # or: a draft release to edit on GitHub
+    python tools/release.py publish --notes n.md --latest   # a beta shown as Latest (testing)
 
 `prepare` (on an up-to-date main, with a clean working tree):
   - bumps pyproject.toml (PEP 440 spelling: 0.3.0b1),
@@ -287,7 +288,8 @@ def cmd_publish(args: argparse.Namespace) -> int:
             "--title",
             f"Signal Archive Recorder {t}",
             *notes,
-            *(["--prerelease"] if v.is_prerelease else []),
+            *(["--prerelease"] if v.is_prerelease and not args.latest else []),
+            *(["--latest"] if args.latest else []),
             *(["--draft"] if args.draft else []),
             *files,
         )
@@ -318,6 +320,12 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("publish")
     p.add_argument("--notes", help="release notes file (Markdown)")
     p.add_argument("--draft", action="store_true", help="create a draft release to edit")
+    p.add_argument(
+        "--latest",
+        action="store_true",
+        help="show a beta as GitHub's Latest release on the front page (GitHub never shows a "
+        "pre-release there). Update checks still treat it as a beta: they go by the version.",
+    )
     p.add_argument("--dry-run", action="store_true")
     p.set_defaults(func=cmd_publish)
     args = parser.parse_args(argv)

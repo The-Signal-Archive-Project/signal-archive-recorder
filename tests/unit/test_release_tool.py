@@ -137,3 +137,24 @@ def test_next_command(capsys: pytest.CaptureFixture[str], monkeypatch: pytest.Mo
     monkeypatch.setattr(release, "current_version", lambda root=None: V("0.2.0"))
     assert release.main(["next", "minor", "--pre", "beta"]) == 0
     assert "-beta.1" in capsys.readouterr().out
+
+
+def test_publish_latest_option(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple[str, ...]] = []
+    monkeypatch.setattr(release, "require_clean_main", lambda: None)
+    monkeypatch.setattr(release, "current_version", lambda root=None: V("0.3.0b2"))
+
+    def fake_sh(*args: str, **kw: object) -> str:
+        calls.append(args)
+        return "" if args[:2] == ("git", "tag") else "abc1234def"
+
+    monkeypatch.setattr(release, "sh", fake_sh)
+    monkeypatch.setattr(release.subprocess, "run", lambda *a, **k: None)
+    monkeypatch.setattr(release.Path, "iterdir", lambda self: iter([]))
+    assert release.main(["publish", "--notes", "n.md", "--latest"]) == 0
+    [create] = [c for c in calls if c[:3] == ("gh", "release", "create")]
+    assert "--latest" in create and "--prerelease" not in create
+    calls.clear()
+    assert release.main(["publish", "--notes", "n.md"]) == 0
+    [create] = [c for c in calls if c[:3] == ("gh", "release", "create")]
+    assert "--prerelease" in create and "--latest" not in create

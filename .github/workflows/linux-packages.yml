@@ -21,6 +21,7 @@ jobs:
   deb:
     name: build the .deb
     runs-on: ubuntu-22.04  # the oldest supported release: its C library suits every newer one
+    timeout-minutes: 30
     permissions:
       contents: write  # attach the .deb to a release
     steps:
@@ -45,6 +46,7 @@ jobs:
     name: test the .deb (${{ matrix.image }})
     needs: deb
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -58,8 +60,8 @@ jobs:
           path: dist
       - name: Install (apt resolves the dependencies)
         run: |
-          apt-get update
-          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends python3 ./dist/*.deb
+          apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 update
+          DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 install -y --no-install-recommends python3 ./dist/*.deb
       - name: Smoke test
         run: python3 installer/linux/smoke_test.py --expect-version "$(python3 -c 'import re;print(re.search(r"^version = \"(.+)\"", open("pyproject.toml").read(), re.M)[1])')"
       - name: Remove cleanly
@@ -68,6 +70,7 @@ jobs:
   aur:
     name: build and test the AUR package (Arch)
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     container: archlinux:latest
     steps:
       - name: Tools and the dependencies in Arch's own repositories

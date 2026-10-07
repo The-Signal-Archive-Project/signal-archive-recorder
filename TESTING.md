@@ -8,7 +8,7 @@ Thank you for helping! Signal Archive Recorder records exactly what your receive
 
 ## 1. Install
 
-Get the newest beta from the [releases page](https://github.com/The-Signal-Archive-Project/signal-archive-recorder/releases) (it's marked **Pre-release**).
+Get the newest beta from the **[latest release](https://github.com/The-Signal-Archive-Project/signal-archive-recorder/releases/latest)**: its title says which beta it is.
 
 - **Windows:** download `SignalArchiveRecorder-…-Setup.exe` and run it. The beta isn't code-signed yet, so Windows may say "Windows protected your PC": choose **More info → Run anyway**. If your antivirus objects, please tell us which antivirus it is.
 - **Debian / Ubuntu:** download the `.deb` file, then run `sudo apt install ./signal-archive-recorder_*_amd64.deb` in the folder you saved it to. Start it from your applications menu.
