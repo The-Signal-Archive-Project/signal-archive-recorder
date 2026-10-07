@@ -154,7 +154,7 @@ ruff check && ruff format --check && mypy
 
 Test uploads go to the **test** repository [`signal-archive-project/signal-archive-intake-test`](https://huggingface.co/datasets/signal-archive-project/signal-archive-intake-test), never the real intake. Point a separate dev config at it (`[upload] repo = ...`), and wipe it when needed with `python tools/reset_test_repo.py`, which refuses any repository whose name doesn't end in `-test`.
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request. All commits must be signed off (`git commit -s`) under the [DCO](https://developercertificate.org/).
+Releases are cut with `python tools/release.py` (see CLAUDE.md, "Versions"). See [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request. All commits must be signed off (`git commit -s`) under the [DCO](https://developercertificate.org/).
 
 ## License
 

@@ -11,6 +11,9 @@ All notable changes to Signal Archive Recorder. Versions follow [semantic versio
 ### Fixed
 - The packaged desktop program started the terminal recorder when given only options (such as `--config FILE`); it now starts the desktop app.
 
+### Project
+- **`tools/release.py`** cuts releases by SemVer: `next`, `prepare {major|minor|patch|pre|final} [--pre beta|rc]` (version, changelog, README pins, a signed-off commit and a PR) and `publish` (tag, build, GitHub release). See CLAUDE.md, "Versions".
+
 ### Windows installer
 - **`SignalArchiveRecorder-<version>-Setup.exe`**: a per-user install (no administrator rights) with a Start-menu entry, optional desktop shortcut and start at login. It includes the desktop app and the command line, and asks you to close a running recorder before upgrading.
 - **Uninstall** keeps recordings, settings and the Hugging Face login by default. It can remove the token, or everything (behind a warning and a second confirmation).
