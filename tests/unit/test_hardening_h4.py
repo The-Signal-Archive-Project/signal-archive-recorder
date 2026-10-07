@@ -92,3 +92,10 @@ def test_window_shows_the_version_and_opens_the_report(qtbot: Any, tmp_path: Pat
     window.report_button.click()
     assert window.report is not None and window.report.isVisible()
     assert window.report.save.isEnabled()
+
+
+def test_discord_announcement_fits_in_one_message() -> None:
+    text = (ROOT / "docs" / "announcement.md").read_text()
+    block = re.search(r"## Discord: beta announcement.*?```\n(.*?)```", text, re.S)
+    assert block is not None
+    assert len(block.group(1).rstrip("\n")) <= 2000  # Discord's limit per message
