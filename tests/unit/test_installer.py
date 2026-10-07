@@ -20,7 +20,7 @@ from signal_archive_recorder.ui.app import WINDOWS_MUTEX
 ROOT = Path(__file__).resolve().parents[2]
 WIN = ROOT / "installer" / "windows"
 ISS = (WIN / "signal-archive-recorder.iss").read_text()
-SPEC = (WIN / "signal-archive-recorder.spec").read_text()
+SPEC = (ROOT / "installer" / "pyinstaller" / "signal-archive-recorder.spec").read_text()
 
 
 def build_module() -> ModuleType:

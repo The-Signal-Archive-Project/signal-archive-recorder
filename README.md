@@ -25,6 +25,26 @@ Download `SignalArchiveRecorder-<version>-Setup.exe` from the [latest release](h
 
 The command line is installed too, as `signal-archive-recorder.exe` in the program folder (`%LOCALAPPDATA%\Programs\Signal Archive Recorder`).
 
+### Debian and Ubuntu
+
+Download `signal-archive-recorder_<version>_amd64.deb` from the [latest release](https://github.com/The-Signal-Archive-Project/signal-archive-recorder/releases) and install it:
+
+```bash
+sudo apt install ./signal-archive-recorder_*_amd64.deb
+```
+
+It brings everything it needs (its own Python), so it works on Debian 12 or newer and Ubuntu 22.04 or newer. Start **Signal Archive Recorder** from your applications menu, or run `signal-archive-recorder-gui`; `signal-archive-recorder` is the command line. To keep your Hugging Face login, you need a keyring service (GNOME Keyring, KWallet or KeePassXC); most desktops have one.
+
+### Arch Linux (AUR)
+
+```bash
+yay -S signal-archive-recorder     # or paru, or any AUR helper
+```
+
+It uses Arch's own Python packages. (The AUR package appears with the first release after v0.2.0.)
+
+Removing a package keeps your recordings and settings. To remove those too, run `signal-archive-recorder forget --everything` before uninstalling.
+
 ### With pipx (Linux, macOS, or Windows from source)
 
 You need **Python 3.11 or newer**. The recorder installs straight from this repository; [pipx](https://pipx.pypa.io/) keeps it in its own environment:

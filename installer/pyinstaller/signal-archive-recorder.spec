@@ -7,10 +7,14 @@
 #   signal-archive-recorder.exe  the command line (console)
 # One folder, not one file: it starts faster, antivirus tools trust it more, and the
 # LGPL libraries (Qt, libsndfile) stay separate, replaceable DLLs.
-# Build with installer/windows/build.py, which also writes version_info.txt.
+# Shared by the Windows installer (installer/windows/build.py, which also writes
+# version_info.txt) and the Debian/Ubuntu package (installer/linux/build_deb.py).
+import sys
+
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules, copy_metadata
 
 HERE = SPECPATH  # noqa: F821 (set by PyInstaller)
+WINDOWS = f"{HERE}/../windows"
 
 datas = collect_data_files("signal_archive_recorder")  # modes, schemas, icon, example config
 for dist in ("signal-archive-recorder", "huggingface_hub", "keyring", "jsonschema",
@@ -36,8 +40,9 @@ def analysis(script):
 
 
 gui, console = analysis("gui_entry.py"), analysis("console_entry.py")
-common = dict(exclude_binaries=True, upx=False, icon=f"{HERE}/icon.ico",
-              version=f"{HERE}/version_info.txt")
+common = dict(exclude_binaries=True, upx=False)
+if sys.platform == "win32":  # the exe icon and version resource are Windows things
+    common.update(icon=f"{WINDOWS}/icon.ico", version=f"{WINDOWS}/version_info.txt")
 gui_exe = EXE(PYZ(gui.pure), gui.scripts, [], name="SignalArchiveRecorder",  # noqa: F821
               console=False, **common)
 console_exe = EXE(PYZ(console.pure), console.scripts, [],  # noqa: F821

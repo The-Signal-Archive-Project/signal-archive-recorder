@@ -4,6 +4,13 @@ All notable changes to Signal Archive Recorder. Versions follow [semantic versio
 
 ## [Unreleased]
 
+### Linux packages
+- **Debian/Ubuntu `.deb`**: a self-contained app (its own Python) for Debian 12+ and Ubuntu 22.04+, with a menu entry, icon and `signal-archive-recorder`/`signal-archive-recorder-gui` commands. Attached to each release, and installed, smoke-tested and removed on all four releases in CI.
+- **Arch Linux (AUR)**: `signal-archive-recorder`, built from the release's source package with Arch's own Python packages, and tested in an Arch container in CI. `installer/aur/update.py` prepares each release's update for the AUR.
+
+### Fixed
+- The packaged desktop program started the terminal recorder when given only options (such as `--config FILE`); it now starts the desktop app.
+
 ### Windows installer
 - **`SignalArchiveRecorder-<version>-Setup.exe`**: a per-user install (no administrator rights) with a Start-menu entry, optional desktop shortcut and start at login. It includes the desktop app and the command line, and asks you to close a running recorder before upgrading.
 - **Uninstall** keeps recordings, settings and the Hugging Face login by default. It can remove the token, or everything (behind a warning and a second confirmation).
