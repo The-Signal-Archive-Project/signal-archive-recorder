@@ -4,9 +4,9 @@
 # writes the PKGBUILD and .SRCINFO to push to the AUR.
 # Maintainer: The Signal Archive Project <https://github.com/The-Signal-Archive-Project>
 pkgname=signal-archive-recorder
-pkgver=0.2.0
+pkgver=0.3.0b1
 pkgrel=1
-_tag=v0.2.0
+_tag=v0.3.0-beta.1
 pkgdesc="Records ham radio receive audio beside WSJT-X for the Signal Archive Project's open dataset"
 arch=('any')
 url="https://github.com/The-Signal-Archive-Project/signal-archive-recorder"
