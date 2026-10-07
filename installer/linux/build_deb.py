@@ -164,7 +164,9 @@ def main() -> int:
     debian = root / "DEBIAN"
     debian.mkdir()
     (debian / "control").write_text(control(v, folder_kb(root)))
-    out = ROOT / "dist" / f"{NAME}_{deb_version(v)}_amd64.deb"
+    # The file name can't keep "~": GitHub turns it into "." on upload, so name it that
+    # way from the start. (The Version field inside keeps "~", which sets the sort order.)
+    out = ROOT / "dist" / f"{NAME}_{deb_version(v).replace('~', '.')}_amd64.deb"
     out.parent.mkdir(exist_ok=True)
     subprocess.run(
         ["dpkg-deb", "--root-owner-group", "-Zxz", "--build", str(root), str(out)], check=True
