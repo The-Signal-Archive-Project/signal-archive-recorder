@@ -144,15 +144,23 @@ def main(setup: Path) -> int:
     check(metas[0]["mode"]["mode_id"]["value"] == "ft8", "labelled FT8 from WSJT-X")
 
     step("desktop app: starts, records, and a second start defers to it")
+    # Its own archive and log, so nothing from the step above can satisfy a check here.
+    gui_archive = work / "gui-archive"
     gui_config = work / "gui.toml"
     gui_config.write_text(
-        config.read_text().replace(str(archive), str(work / "gui-archive"))
-        + '[recording]\nstart = "always"\n',
+        f"[storage]\nroot = {json.dumps(str(gui_archive))}\n"
+        f"[audio]\nfile = {json.dumps(str(wav))}\nfile_loop = true\n"
+        f"[wsjtx]\nport = {PORT + 1}\n[clock]\nenabled = false\n[updates]\ncheck = false\n"
+        '[recording]\nstart = "always"\n',
         encoding="utf-8",
     )
-    gui_env = {**env, "QT_QPA_PLATFORM": "offscreen"}
+    gui_env = {
+        **env,
+        "QT_QPA_PLATFORM": "offscreen",
+        "SIGNAL_ARCHIVE_LOG_DIR": str(work / "gui-logs"),
+    }
     gui = subprocess.Popen([str(GUI), "tray", "--config", str(gui_config)], env=gui_env)
-    log = work / "logs" / "recorder.log"
+    log = work / "gui-logs" / "recorder.log"
     wait_for(lambda: log.exists() and "recording started" in log.read_text(), "the app to record")
     second = subprocess.Popen([str(GUI), "tray", "--config", str(gui_config)], env=gui_env)
     try:
@@ -167,6 +175,7 @@ def main(setup: Path) -> int:
         "a second start shows the running app instead",
     )
     check(gui.poll() is None, "the first is still recording")
+    check(len(list(gui_archive.glob("sessions/*"))) == 1, "only one copy recorded")
     gui.kill()
 
     step("forget (dry run)")
