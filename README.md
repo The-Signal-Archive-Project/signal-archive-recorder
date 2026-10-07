@@ -2,9 +2,9 @@
 
 Station-side recorder for the **Signal Archive Project**. It captures bit-exact receive audio from your rig, collects metadata automatically from software you already run (starting with WSJT-X for FT8), and uploads sessions to the project's open dataset.
 
-> **Status:** v0.2.0 (alpha). It records, labels and uploads FT8/FT4 sessions, with a desktop app (window and tray icon) or from the terminal. Expect changes before 1.0; see the [changelog](CHANGELOG.md). The build plan is in [CLAUDE.md](CLAUDE.md).
-
-> **Beta testers wanted!** If you run WSJT-X or JTDX, see the **[tester guide](TESTING.md)**. It covers installing, what to try and how to report back.
+> **Status: public beta.** The [latest release](https://github.com/The-Signal-Archive-Project/signal-archive-recorder/releases/latest) is the newest beta of 0.3.0, with installers for Windows, Debian and Ubuntu. It records FT8 and FT4 beside WSJT-X, from a tray app that starts with your computer and only records while WSJT-X runs, labels each recording, and uploads it after you've reviewed it. During the beta, uploads go to a test dataset. The last stable release is v0.2.0. Expect changes before 1.0; see the [changelog](CHANGELOG.md).
+>
+> **Beta testers wanted!** If you run WSJT-X or JTDX, start with the **[tester guide](TESTING.md)**. It covers installing, what to try and how to report back.
 
 ## Principles
 
@@ -13,13 +13,13 @@ Station-side recorder for the **Signal Archive Project**. It captures bit-exact 
 - **Automatic metadata:** if software can know it, you're never asked for it.
 - **Consent first:** nothing is uploaded without your consent, and you review every upload.
 
-FT8 comes first. Other digital modes (FT4, WSPR, JS8, Q65, PSK31, RTTY and more) are planned soon after.
+FT8 and FT4 come first. More digital modes (WSPR, JS8, Q65, PSK31, RTTY and others) are planned.
 
 ## Install
 
 ### Windows (installer)
 
-Download `SignalArchiveRecorder-<version>-Setup.exe` from the [latest release](https://github.com/The-Signal-Archive-Project/signal-archive-recorder/releases) and run it. It installs for your user only (no administrator rights needed), adds a Start-menu entry and, if you leave the box ticked, starts with Windows. On first start a setup window walks you through everything; after that the recorder lives in the system tray (lower right) and only records while WSJT-X is running.
+Download `SignalArchiveRecorder-<version>-Setup.exe` from the [latest release](https://github.com/The-Signal-Archive-Project/signal-archive-recorder/releases/latest) and run it. It installs for your user only (no administrator rights needed), adds a Start-menu entry and, if you leave the box ticked, starts with Windows. On first start a setup window walks you through everything; after that the recorder lives in the system tray (lower right) and only records while WSJT-X is running.
 
 - **"Windows protected your PC"?** The beta installer isn't code-signed yet. Click **More info**, then **Run anyway**. Signing comes before 1.0.
 - **Antivirus warnings:** some antivirus tools are wary of new, unsigned programs. If yours blocks it, please tell us (with the antivirus name) so we can report the false positive.

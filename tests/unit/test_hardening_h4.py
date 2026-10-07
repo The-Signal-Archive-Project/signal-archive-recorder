@@ -30,16 +30,16 @@ def test_links_point_at_real_forms_and_never_at_an_expiring_invite() -> None:
     shipped = " ".join(str(v) for k, v in vars(links).items() if k.isupper())
     assert "discord.gg" not in shipped  # invites expire; the app links to the README
     assert links.COMMUNITY.endswith("#community")
-    assert "## Community" in (ROOT / "README.md").read_text()
+    assert "## Community" in (ROOT / "README.md").read_text(encoding="utf-8")
 
 
 def test_issue_forms_are_valid() -> None:
     yaml = pytest.importorskip("yaml")
-    config = yaml.safe_load((TEMPLATES / "config.yml").read_text())
+    config = yaml.safe_load((TEMPLATES / "config.yml").read_text(encoding="utf-8"))
     assert config["blank_issues_enabled"] is False
     assert any("groups.io" in link["url"] for link in config["contact_links"])
     for name in ("test-report.yml", "bug-report.yml", "idea.yml"):
-        form = yaml.safe_load((TEMPLATES / name).read_text())
+        form = yaml.safe_load((TEMPLATES / name).read_text(encoding="utf-8"))
         assert form["name"] and form["description"] and form["body"]
         ids = [item.get("id") for item in form["body"] if item["type"] != "markdown"]
         assert len(ids) == len(set(ids)), f"duplicate ids in {name}"
@@ -49,7 +49,7 @@ def test_issue_forms_are_valid() -> None:
 
 
 def test_guide_links_resolve() -> None:
-    text = (ROOT / "TESTING.md").read_text()
+    text = (ROOT / "TESTING.md").read_text(encoding="utf-8")
     for target in re.findall(r"\]\((?!https?://)([^)#]+)", text):
         assert (ROOT / target).exists(), target
     assert links.GROUP in text and "test-report.yml" in text
@@ -95,7 +95,7 @@ def test_window_shows_the_version_and_opens_the_report(qtbot: Any, tmp_path: Pat
 
 
 def test_discord_announcement_fits_in_one_message() -> None:
-    text = (ROOT / "docs" / "announcement.md").read_text()
+    text = (ROOT / "docs" / "announcement.md").read_text(encoding="utf-8")
     block = re.search(r"## Discord: beta announcement.*?```\n(.*?)```", text, re.S)
     assert block is not None
     assert len(block.group(1).rstrip("\n")) <= 2000  # Discord's limit per message
