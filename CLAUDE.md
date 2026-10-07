@@ -466,7 +466,7 @@ Before adding modes, FT8 through WSJT-X has to work on many stations: different 
 - **.deb:** self-contained under `/opt` (Debian and Ubuntu ship older Python libraries), depending on `libportaudio2`, `libsndfile1` and Qt's system libraries. Attached to each release and CI-tested on Debian 12/13 and Ubuntu 22.04/24.04.
 - Both get a desktop entry and an icon.
 
-**H4: the testing round.** `TESTING.md` for testers, GitHub issue templates (setup details plus the diagnostics zip), a setups-covered matrix, an announcement text, and a **v0.2.0-beta** release.
+**H4: the testing round.** `TESTING.md` for testers, GitHub issue templates (setup details plus the diagnostics zip), a setups-covered matrix, an announcement text, and a **v0.3.0-beta.1** pre-release.
 
 ### Stage 10: More modes and sources (v0.4)
 
@@ -514,6 +514,16 @@ Exit tests:
 SoapySDR input writing conforming SigMF with a clip-length cap. Treat it as another capture backend behind the same `capture` interface. Tests: SigMF output passes `sigmf` validation, the cap is enforced, and the metadata carries the same core fields.
 
 ---
+
+## Versions
+
+Releases follow **[Semantic Versioning](https://semver.org/)** (owner's rule from v0.2.0 on). Before 1.0:
+- **MINOR** (0.x.0) for new features or changed behaviour, including config or metadata changes.
+- **PATCH** (0.x.y) for bug fixes only.
+- Pre-releases use SemVer suffixes in the tag and GitHub release (`v0.3.0-beta.1`, `-rc.1`), marked as pre-releases on GitHub. In `pyproject.toml` the same version is written the PEP 440 way (`0.3.0b1`, `0.3.0rc1`), which Python tools treat as the same thing. The update notice only offers pre-releases to people already running one.
+- No leading zeros (`0.1.01` isn't a version), and a version is never reused or moved once tagged.
+
+A release is a PR that bumps `pyproject.toml`, moves CHANGELOG's Unreleased section under the new version (with compare links), and pins the README's install commands. After it's merged: tag the merge commit, build the wheel and sdist, and publish the GitHub release with notes written to the guideline below.
 
 ## Release notes
 
