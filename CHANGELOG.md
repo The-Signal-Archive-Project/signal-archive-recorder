@@ -4,14 +4,7 @@ All notable changes to Signal Archive Recorder. Versions follow [semantic versio
 
 ## [Unreleased]
 
-### Windows installer
-- **`SignalArchiveRecorder-<version>-Setup.exe`**: a per-user install (no administrator rights) with a Start-menu entry, optional desktop shortcut and start at login. It includes the desktop app and the command line, and asks you to close a running recorder before upgrading.
-- **Uninstall** keeps recordings, settings and the Hugging Face login by default. It can remove the token, or everything (behind a warning and a second confirmation).
-- Built and smoke-tested on Windows in CI for every change: it installs, checks the packaged app (keyring, audio libraries, Qt), records a session driven by a fake WSJT-X, starts the desktop app twice, and uninstalls. Attached to each GitHub release.
-
-### Other
-- **`signal-archive-recorder forget`**: what uninstalling removes (start at login; `--token`; `--everything`, which deletes recordings, settings and logs and asks for confirmation). Only the archive's `sessions` folder and the app's own folders are ever deleted.
-- The app has an icon. Diagnostics now say which keyring backend is in use.
+## [0.2.0] - 2026-10-06
 
 ### Uploads
 - **Resumable uploads:** a session goes up in steps within its one pull request (each chunk, then labels and `session.json`). If the connection drops, the next attempt sends only what's missing.
@@ -83,5 +76,6 @@ The first release. It records bit-exact receive audio from a ham station, labels
 - No GPL dependencies (enforced in CI); DCO sign-off on every commit.
 - CI on Linux and Windows with Python 3.11 and 3.14.
 
-[Unreleased]: https://github.com/The-Signal-Archive-Project/signal-archive-recorder/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/The-Signal-Archive-Project/signal-archive-recorder/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/The-Signal-Archive-Project/signal-archive-recorder/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/The-Signal-Archive-Project/signal-archive-recorder/releases/tag/v0.1.0
