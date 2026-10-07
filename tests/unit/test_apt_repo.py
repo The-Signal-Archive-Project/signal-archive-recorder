@@ -126,12 +126,16 @@ def test_full_build(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         packages = (dist / "main/binary-amd64/Packages").read_bytes()
         assert f"Version: {version}\n".encode() in packages
         assert gzip.decompress((dist / "main/binary-amd64/Packages.gz").read_bytes()) == packages
-        text = (dist / "Release").read_text()
+        text = (dist / "Release").read_text(encoding="utf-8")
         assert f"Suite: {suite}\n" in text and "Components: main\n" in text
         digest = hashlib.sha256(packages).hexdigest()
         assert f" {digest} {len(packages):>8} main/binary-amd64/Packages\n" in text
-    assert (site / "signal-archive.asc").read_text().startswith("-----BEGIN PGP PUBLIC KEY BLOCK")
-    page = (site / "index.html").read_text()
+    assert (
+        (site / "signal-archive.asc")
+        .read_text(encoding="utf-8")
+        .startswith("-----BEGIN PGP PUBLIC KEY BLOCK")
+    )
+    page = (site / "index.html").read_text(encoding="utf-8")
     assert "{" + "site}" not in page and repo.SITE_URL in page and "v0.3.0-beta.2" in page
     assert (site / ".nojekyll").exists()
 
@@ -140,12 +144,12 @@ def test_an_empty_channel_is_still_valid(tmp_path: Path) -> None:
     repo.write_channel(tmp_path, "stable", None, dt.datetime(2026, 10, 7, tzinfo=dt.UTC))
     dist = tmp_path / "dists" / "stable"
     assert (dist / "main/binary-amd64/Packages").read_bytes() == b""
-    assert "Date: Wed, 07 Oct 2026 00:00:00 UTC" in (dist / "Release").read_text()
+    assert "Date: Wed, 07 Oct 2026 00:00:00 UTC" in (dist / "Release").read_text(encoding="utf-8")
 
 
 def test_published_key_is_the_project_key() -> None:
-    workflow = (ROOT / ".github/workflows/apt-repo.yml").read_text()
+    workflow = (ROOT / ".github/workflows/apt-repo.yml").read_text(encoding="utf-8")
     fingerprint = "9EC64E0C16932FCCC381381C38FA930D4522E702"
     assert f"KEY_ID: {fingerprint}" in workflow
-    page = (ROOT / "installer/apt/index.template.html").read_text()
+    page = (ROOT / "installer/apt/index.template.html").read_text(encoding="utf-8")
     assert "9EC6 4E0C 1693 2FCC C381 381C 38FA 930D 4522 E702" in page

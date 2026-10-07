@@ -17,8 +17,8 @@ from pathlib import Path
 from types import ModuleType
 
 ROOT = Path(__file__).resolve().parents[2]
-PYPROJECT = tomllib.loads((ROOT / "pyproject.toml").read_text())
-PKGBUILD = (ROOT / "installer" / "aur" / "PKGBUILD").read_text()
+PYPROJECT = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+PKGBUILD = (ROOT / "installer" / "aur" / "PKGBUILD").read_text(encoding="utf-8")
 
 
 def load(name: str, path: Path) -> ModuleType:
@@ -85,7 +85,7 @@ def test_aur_checksum_and_url() -> None:
 def test_desktop_entry() -> None:
     entry = configparser.ConfigParser(interpolation=None)
     entry.optionxform = str  # type: ignore[assignment,method-assign]
-    entry.read(ROOT / "installer" / "linux" / "signal-archive-recorder.desktop")
+    entry.read(ROOT / "installer" / "linux" / "signal-archive-recorder.desktop", encoding="utf-8")
     d = entry["Desktop Entry"]
     assert d["Exec"] in PYPROJECT["project"]["gui-scripts"]  # the command both packages install
     assert d["Icon"] == "signal-archive-recorder" and d["Terminal"] == "false"

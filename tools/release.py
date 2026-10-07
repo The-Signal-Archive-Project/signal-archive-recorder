@@ -48,6 +48,10 @@ PRE_NAMES = {"b": "beta", "rc": "rc"}
 PRE_CODES = {"beta": "b", "rc": "rc"}
 
 
+def read(path: Path) -> str:
+    return path.read_text(encoding="utf-8")  # never the platform's default (Windows: cp1252)
+
+
 class ReleaseError(Exception):
     """Something about the repository or the request prevents a release."""
 
@@ -139,8 +143,12 @@ def edit_changelog(text: str, old: Version, new: Version, date: dt.date) -> str:
     )
 
 
-def edit_readme(text: str, last_final: Version, new: Version) -> str:
-    """Point the README at a new final release (pre-releases leave it alone)."""
+def edit_readme(text: str, last_final: Version, new: Version, old: Version | None = None) -> str:
+    """Re-pin install commands. Pins to the last final release move only to a new final
+    release (betas are for testers); pins to the previous beta always move on (to the
+    next beta, or to the release that follows it)."""
+    if old is not None and old.is_prerelease:
+        text = text.replace(f"@{tag(old)}", f"@{tag(new)}")
     if new.is_prerelease:
         return text
     return text.replace(tag(last_final), tag(new))
@@ -160,7 +168,7 @@ class Plan:
 
 
 def current_version(root: Path = ROOT) -> Version:
-    m = re.search(r'(?m)^version = "([^"]+)"$', (root / "pyproject.toml").read_text())
+    m = re.search(r'(?m)^version = "([^"]+)"$', read(root / "pyproject.toml"))
     if not m:
         raise ReleaseError("no version in pyproject.toml")
     return Version(m.group(1))
@@ -168,7 +176,7 @@ def current_version(root: Path = ROOT) -> Version:
 
 def last_final(root: Path, current: Version) -> Version:
     """The version the README currently points at (the last final release)."""
-    m = re.search(r"@v(\d+\.\d+\.\d+)\b(?!-)", (root / "README.md").read_text())
+    m = re.search(r"@v(\d+\.\d+\.\d+)\b(?!-)", read(root / "README.md"))
     return Version(m.group(1)) if m else current
 
 
@@ -176,15 +184,16 @@ def plan(root: Path, kind: str, pre: str | None, date: dt.date) -> Plan:
     old = current_version(root)
     new = bump(old, kind, pre)
     files = {
-        root / "pyproject.toml": edit_pyproject((root / "pyproject.toml").read_text(), new),
-        root / "CHANGELOG.md": edit_changelog((root / "CHANGELOG.md").read_text(), old, new, date),
-        root / "README.md": edit_readme(
-            (root / "README.md").read_text(), last_final(root, old), new
+        root / "pyproject.toml": edit_pyproject(read(root / "pyproject.toml"), new),
+        root / "CHANGELOG.md": edit_changelog(read(root / "CHANGELOG.md"), old, new, date),
+        root / "README.md": edit_readme(read(root / "README.md"), last_final(root, old), new, old),
+        root / "TESTING.md": edit_readme(
+            read(root / "TESTING.md"), last_final(root, old), new, old
         ),
     }
     pkgbuild = root / "installer" / "aur" / "PKGBUILD"
     if pkgbuild.exists():
-        files[pkgbuild] = edit_pkgbuild(pkgbuild.read_text(), new)
+        files[pkgbuild] = edit_pkgbuild(read(pkgbuild), new)
     return Plan(old, new, files)
 
 
@@ -221,7 +230,7 @@ def cmd_prepare(args: argparse.Namespace) -> int:
     p = plan(ROOT, args.kind, args.pre, dt.date.today())
     print(f"Release {semver(p.old)} -> {semver(p.new)} (tag {tag(p.new)})")
     for path, content in p.files.items():
-        changed = path.read_text() != content
+        changed = read(path) != content
         print(f"  {'update' if changed else 'same  '} {path.relative_to(ROOT)}")
     if args.dry_run:
         print("Dry run: nothing changed.")
@@ -229,7 +238,7 @@ def cmd_prepare(args: argparse.Namespace) -> int:
     branch = f"release-{tag(p.new)}"
     sh("git", "switch", "-q", "-c", branch)
     for path, content in p.files.items():
-        path.write_text(content)
+        path.write_text(content, encoding="utf-8")
     sh("git", "add", *(str(path) for path in p.files))
     sh("git", "commit", "-q", "-s", "-m", f"Release {tag(p.new)}")
     print(f"Committed on {branch}.")
@@ -301,7 +310,7 @@ def cmd_publish(args: argparse.Namespace) -> int:
 
 
 def unreleased_or_section(v: Version) -> str:
-    text = (ROOT / "CHANGELOG.md").read_text()
+    text = read(ROOT / "CHANGELOG.md")
     m = re.search(rf"(?ms)^## \[{re.escape(semver(v))}\][^\n]*\n(.*?)(?=^## \[|^\[)", text)
     return m.group(1).strip() if m else ""
 

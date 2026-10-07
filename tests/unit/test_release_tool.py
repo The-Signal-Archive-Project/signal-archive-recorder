@@ -72,30 +72,36 @@ def test_spellings() -> None:
 def repo_copy(tmp_path: Path, version: str = "0.2.0") -> Path:
     """Copies of the real files, rewound to a known final version (the repository's
     own version moves on with every release)."""
-    for name in ("pyproject.toml", "CHANGELOG.md", "README.md"):
+    for name in ("pyproject.toml", "CHANGELOG.md", "README.md", "TESTING.md"):
         shutil.copyfile(ROOT / name, tmp_path / name)
     v = V(version)
     pyproject = tmp_path / "pyproject.toml"
-    pyproject.write_text(release.edit_pyproject(pyproject.read_text(), v))
+    pyproject.write_text(
+        release.edit_pyproject(pyproject.read_text(encoding="utf-8"), v), encoding="utf-8"
+    )
     changelog = tmp_path / "CHANGELOG.md"
     changelog.write_text(
         re.sub(
             r"(?m)^\[Unreleased\]: .*$",
             f"[Unreleased]: {release.REPO_URL}/compare/{release.tag(v)}...HEAD",
-            changelog.read_text(),
-        )
+            changelog.read_text(encoding="utf-8"),
+        ),
+        encoding="utf-8",
     )
     readme = tmp_path / "README.md"
-    readme.write_text(re.sub(r"@v\d+\.\d+\.\d+\b(?!-)", f"@{release.tag(v)}", readme.read_text()))
+    readme.write_text(
+        re.sub(r"@v\d+\.\d+\.\d+\b(?!-)", f"@{release.tag(v)}", readme.read_text(encoding="utf-8")),
+        encoding="utf-8",
+    )
     return tmp_path
 
 
 def test_prepare_a_final_release(tmp_path: Path) -> None:
     root = repo_copy(tmp_path)
-    changelog = (root / "CHANGELOG.md").read_text()
+    changelog = (root / "CHANGELOG.md").read_text(encoding="utf-8")
     if not release.unreleased_entries(changelog):  # make sure there's something to release
         changelog = changelog.replace("## [Unreleased]\n", "## [Unreleased]\n\n### Fixed\n- x\n", 1)
-        (root / "CHANGELOG.md").write_text(changelog)
+        (root / "CHANGELOG.md").write_text(changelog, encoding="utf-8")
     old = release.current_version(root)
     p = release.plan(root, "minor", None, DAY)
     new = release.semver(p.new)
@@ -111,12 +117,13 @@ def test_prepare_a_final_release(tmp_path: Path) -> None:
 
 def test_a_beta_leaves_the_readme_alone(tmp_path: Path) -> None:
     root = repo_copy(tmp_path)
-    changelog = (root / "CHANGELOG.md").read_text()
+    changelog = (root / "CHANGELOG.md").read_text(encoding="utf-8")
     (root / "CHANGELOG.md").write_text(
-        changelog.replace("## [Unreleased]\n", "## [Unreleased]\n\n### Fixed\n- y\n", 1)
+        changelog.replace("## [Unreleased]\n", "## [Unreleased]\n\n### Fixed\n- y\n", 1),
+        encoding="utf-8",
     )
     p = release.plan(root, "minor", "beta", DAY)
-    assert p.files[root / "README.md"] == (root / "README.md").read_text()
+    assert p.files[root / "README.md"] == (root / "README.md").read_text(encoding="utf-8")
     assert f'version = "{p.new}"' in p.files[root / "pyproject.toml"]
     assert p.new.is_prerelease
 
@@ -158,3 +165,12 @@ def test_publish_latest_option(monkeypatch: pytest.MonkeyPatch) -> None:
     assert release.main(["publish", "--notes", "n.md"]) == 0
     [create] = [c for c in calls if c[:3] == ("gh", "release", "create")]
     assert "--prerelease" in create and "--latest" not in create
+
+
+def test_beta_pins_follow_each_new_version() -> None:
+    old, last_final = V("0.3.0b2"), V("0.2.0")
+    text = "stable @v0.2.0 and beta @v0.3.0-beta.2\n"
+    nxt = release.edit_readme(text, last_final, V("0.3.0b3"), old)
+    assert nxt == "stable @v0.2.0 and beta @v0.3.0-beta.3\n"  # the stable pin stays
+    final = release.edit_readme(text, last_final, V("0.3.0"), old)
+    assert final == "stable @v0.3.0 and beta @v0.3.0\n"  # both move to the release
