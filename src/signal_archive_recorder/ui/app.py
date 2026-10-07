@@ -53,6 +53,7 @@ from signal_archive_recorder.ui.autostart import Autostart
 from signal_archive_recorder.ui.controller import SessionRow
 from signal_archive_recorder.ui.health import CheckItem, HealthInputs, checklist, tray_state
 from signal_archive_recorder.ui.review_window import ReviewWindow
+from signal_archive_recorder.updates import notice
 
 log = logging.getLogger(__name__)
 
@@ -71,6 +72,7 @@ TRAY_TEXT = {
     "red": "Not recording",
     "grey": "Paused",
 }
+NOTICE_COLOURS = {"info": "#4a5a70", "recommended": "#2f6fd6", "important": "#c25a00"}
 PRESET_NOTES = ("Strong QRM", "Rare DX", "Band opening", "Antenna change")
 METER_FLOOR_DBFS = -90.0
 
@@ -237,8 +239,13 @@ class StatusWindow(QWidget):
         self.pause_button.setText("Resume" if self.controller.paused else "Pause")
         release = getattr(self.controller, "update", None)
         if release is not None and self.update_banner.isHidden():
+            n = notice(release)
+            self.update_banner.setStyleSheet(
+                f"background: {NOTICE_COLOURS[n.level]}; color: white; padding: 6px; "
+                "border-radius: 4px;"
+            )
             self.update_banner.setText(
-                f"Version {release.label} is available. "
+                f"<b>{n.title}</b><br>{n.text} "
                 f'<a style="color: white;" href="{release.url}">Download it here</a>.'
             )
             self.update_banner.show()
@@ -338,9 +345,17 @@ class Tray:
         release = getattr(self.window.controller, "update", None)
         if release is not None and release != self._notified:
             self._notified = release
+            n = notice(release)
+            icon = (
+                QSystemTrayIcon.MessageIcon.Warning
+                if n.level == "important"
+                else QSystemTrayIcon.MessageIcon.Information
+            )
             self.icon.showMessage(
-                "Signal Archive Recorder",
-                f"Version {release.label} is available. Open the status window to download it.",
+                n.title,
+                f"{n.text} Open the status window to download it.",
+                icon,
+                0 if n.level == "important" else 10_000,
             )
         self.icon.setIcon(QIcon(dot(self.window.state, 32)))
         self.icon.setToolTip(f"Signal Archive Recorder: {TRAY_TEXT[self.window.state]}")

@@ -20,16 +20,14 @@ import argparse
 import sys
 from typing import Any
 
-from signal_archive_recorder.upload.hub import DEFAULT_REPO
+from signal_archive_recorder.upload.hub import PRODUCTION_REPO, TEST_REPO
 from signal_archive_recorder.upload.token import TokenStore
-
-TEST_REPO = "signal-archive-project/signal-archive-intake-test"
 
 
 def check_target(repo: str) -> None:
     """Raise unless the repository is clearly a test repository."""
     name = repo.split("/", 1)[-1]
-    if repo == DEFAULT_REPO or not name.endswith("-test"):
+    if repo == PRODUCTION_REPO or not name.endswith("-test"):
         raise SystemExit(f"refusing to wipe {repo}: only repositories named *-test can be reset")
 
 
