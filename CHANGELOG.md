@@ -4,6 +4,10 @@ All notable changes to Signal Archive Recorder. Versions follow [semantic versio
 
 ## [Unreleased]
 
+### Linux packages
+- **APT repository** for Debian and Ubuntu at https://the-signal-archive-project.github.io/signal-archive-recorder/, with a **stable** channel (releases) and a **beta** channel (testers). Packages are signed. After each release it's rebuilt, tested with apt on Debian 12/13 and Ubuntu 22.04/24.04, published, and installed from the live site as a final check.
+- The AUR package waits for AUR account registration to reopen; Arch users install with pipx meanwhile.
+
 ## [0.3.0-beta.2] - 2026-10-07
 
 ### Fixed

@@ -29,21 +29,29 @@ The command line is installed too, as `signal-archive-recorder.exe` in the progr
 
 ### Debian and Ubuntu
 
-Download `signal-archive-recorder_<version>_amd64.deb` from the [latest release](https://github.com/The-Signal-Archive-Project/signal-archive-recorder/releases) and install it:
+**Recommended: add our package repository**, so updates come with your usual `apt upgrade`. The steps are on **[our Debian/Ubuntu page](https://the-signal-archive-project.github.io/signal-archive-recorder/)**. In short, for the stable channel (use `beta` in place of `stable` to test betas):
 
 ```bash
-sudo apt install ./signal-archive-recorder_*_amd64.deb
+sudo install -d -m 0755 /etc/apt/keyrings
+curl -fsSL https://the-signal-archive-project.github.io/signal-archive-recorder/signal-archive.asc | sudo tee /etc/apt/keyrings/signal-archive.asc > /dev/null
+echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/signal-archive.asc] https://the-signal-archive-project.github.io/signal-archive-recorder stable main" \
+  | sudo tee /etc/apt/sources.list.d/signal-archive.list
+sudo apt update && sudo apt install signal-archive-recorder
 ```
+
+(The stable channel fills when 0.3.0 is released; until then, use `beta`.) Or download `signal-archive-recorder_<version>_amd64.deb` from the [latest release](https://github.com/The-Signal-Archive-Project/signal-archive-recorder/releases/latest) and run `sudo apt install ./signal-archive-recorder_*_amd64.deb`, which installs it without updates.
 
 It brings everything it needs (its own Python), so it works on Debian 12 or newer and Ubuntu 22.04 or newer. Start **Signal Archive Recorder** from your applications menu, or run `signal-archive-recorder-gui`; `signal-archive-recorder` is the command line. To keep your Hugging Face login, you need a keyring service (GNOME Keyring, KWallet or KeePassXC); most desktops have one.
 
-### Arch Linux (AUR)
+### Arch Linux
+
+The AUR package is ready, but it's waiting for the AUR to reopen account registration (paused because of spam). Until then, install with pipx:
 
 ```bash
-yay -S signal-archive-recorder     # or paru, or any AUR helper
+sudo pacman -S --needed python-pipx portaudio
+pipx install "signal-archive-recorder[gui] @ git+https://github.com/The-Signal-Archive-Project/signal-archive-recorder@v0.3.0-beta.2"
+signal-archive-recorder-gui
 ```
-
-It uses Arch's own Python packages. (The AUR package appears with the first release after v0.2.0.)
 
 Removing a package keeps your recordings and settings. To remove those too, run `signal-archive-recorder forget --everything` before uninstalling.
 

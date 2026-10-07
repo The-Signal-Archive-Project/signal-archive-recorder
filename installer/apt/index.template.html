@@ -1,0 +1,58 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: MPL-2.0 -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Signal Archive Recorder for Debian and Ubuntu</title>
+<style>
+  :root { --bg: #ffffff; --fg: #1d2330; --muted: #5b6474; --code: #f2f4f8; --accent: #173a6b; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #11151c; --fg: #e6e9ef; --muted: #9aa3b2; --code: #1c222d; --accent: #8fb4ec; }
+  }
+  body { background: var(--bg); color: var(--fg); font: 16px/1.55 system-ui, sans-serif;
+         max-width: 46rem; margin: 2rem auto; padding: 0 16px; }
+  h1 { color: var(--accent); font-size: 1.6rem; }
+  h2 { font-size: 1.2rem; margin-top: 2rem; }
+  pre { background: var(--code); padding: 12px; border-radius: 6px; overflow-x: auto; }
+  code { font-family: ui-monospace, monospace; font-size: 0.92em; }
+  .muted { color: var(--muted); }
+</style>
+</head>
+<body>
+<h1>Signal Archive Recorder for Debian and Ubuntu</h1>
+<p>Signal Archive Recorder runs beside WSJT-X and records exactly what your receiver hears, for
+the <a href="https://github.com/The-Signal-Archive-Project/signal-archive-recorder">Signal Archive
+Project</a>'s open dataset of real radio signals. Adding this repository lets <code>apt</code>
+install it and keep it up to date. It works on Debian 12 or newer and Ubuntu 22.04 or newer (64-bit PC).</p>
+
+<h2>Stable (most people)</h2>
+<pre><code>sudo install -d -m 0755 /etc/apt/keyrings
+curl -fsSL {site}/signal-archive.asc | sudo tee /etc/apt/keyrings/signal-archive.asc &gt; /dev/null
+echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/signal-archive.asc] {site} stable main" \
+  | sudo tee /etc/apt/sources.list.d/signal-archive.list
+sudo apt update &amp;&amp; sudo apt install signal-archive-recorder</code></pre>
+<p class="muted">Currently: {stable}</p>
+
+<h2>Beta (testers)</h2>
+<p>The same, with <code>beta</code> in place of <code>stable</code>. You get the newest beta,
+or the newest release once it's newer than every beta.</p>
+<pre><code>sudo install -d -m 0755 /etc/apt/keyrings
+curl -fsSL {site}/signal-archive.asc | sudo tee /etc/apt/keyrings/signal-archive.asc &gt; /dev/null
+echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/signal-archive.asc] {site} beta main" \
+  | sudo tee /etc/apt/sources.list.d/signal-archive.list
+sudo apt update &amp;&amp; sudo apt install signal-archive-recorder</code></pre>
+<p class="muted">Currently: {beta}. Beta recordings go to a test dataset; see the
+<a href="https://github.com/The-Signal-Archive-Project/signal-archive-recorder/blob/main/TESTING.md">tester guide</a>.</p>
+
+<h2>Afterwards</h2>
+<p>Updates arrive with your normal <code>sudo apt update &amp;&amp; sudo apt upgrade</code>. Start
+<b>Signal Archive Recorder</b> from your applications menu. To switch channels, run the
+<code>echo</code> line again with the other channel name, then <code>sudo apt update</code>. To stop
+using this repository: <code>sudo rm /etc/apt/sources.list.d/signal-archive.list /etc/apt/keyrings/signal-archive.asc</code>.</p>
+
+<p class="muted">Packages are signed with the key
+<code>9EC6 4E0C 1693 2FCC C381 381C 38FA 930D 4522 E702</code> (Signal Archive Project packages).
+Questions: <a href="https://groups.io/g/signal-archive">groups.io/g/signal-archive</a>.</p>
+</body>
+</html>
