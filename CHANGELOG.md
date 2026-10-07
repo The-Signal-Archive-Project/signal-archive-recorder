@@ -4,6 +4,9 @@ All notable changes to Signal Archive Recorder. Versions follow [semantic versio
 
 ## [Unreleased]
 
+### Fixed
+- The `.deb`'s file name uses `.` where its version has `~` (`…_0.3.0.beta1_amd64.deb`), matching what GitHub shows on the release page.
+
 ## [0.3.0-beta.1] - 2026-10-06
 
 ### Linux packages
