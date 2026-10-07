@@ -523,7 +523,11 @@ Releases follow **[Semantic Versioning](https://semver.org/)** (owner's rule fro
 - Pre-releases use SemVer suffixes in the tag and GitHub release (`v0.3.0-beta.1`, `-rc.1`), marked as pre-releases on GitHub. In `pyproject.toml` the same version is written the PEP 440 way (`0.3.0b1`, `0.3.0rc1`), which Python tools treat as the same thing. The update notice only offers pre-releases to people already running one.
 - No leading zeros (`0.1.01` isn't a version), and a version is never reused or moved once tagged.
 
-A release is a PR that bumps `pyproject.toml`, moves CHANGELOG's Unreleased section under the new version (with compare links), and pins the README's install commands. After it's merged: tag the merge commit, build the wheel and sdist, and publish the GitHub release with notes written to the guideline below.
+**Cut releases with `tools/release.py`**, not by hand:
+- `python tools/release.py next minor` shows what the next version would be.
+- `prepare {major|minor|patch} [--pre beta|rc]`, `prepare pre [--pre rc]` and `prepare final` run on a clean, up-to-date main. They bump `pyproject.toml`, move CHANGELOG's Unreleased entries under the new version (with compare links), re-pin the README's install commands (final releases only), update the AUR PKGBUILD's `pkgver`, then commit with sign-off on `release-vX.Y.Z`, push, and open the PR.
+- After the PR is merged: `publish --notes FILE` (or `--draft`, to write the notes on GitHub). This tags the merge commit, builds the wheel and sdist from a clean checkout of it, and creates the GitHub release (marked as a pre-release for betas and RCs). Publishing triggers the installer workflows, which attach their packages.
+- Both take `--dry-run`. The script refuses to reuse a version, to release with an empty Unreleased section, or to skip from a pre-release straight to another minor version.
 
 ## Release notes
 
