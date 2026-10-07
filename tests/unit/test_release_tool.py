@@ -6,6 +6,7 @@
 
 import datetime as dt
 import importlib.util
+import re
 import shutil
 import sys
 from pathlib import Path
@@ -68,9 +69,24 @@ def test_spellings() -> None:
     assert V(release.tag(v).removeprefix("v")) == v  # the update check reads tags back
 
 
-def repo_copy(tmp_path: Path) -> Path:
+def repo_copy(tmp_path: Path, version: str = "0.2.0") -> Path:
+    """Copies of the real files, rewound to a known final version (the repository's
+    own version moves on with every release)."""
     for name in ("pyproject.toml", "CHANGELOG.md", "README.md"):
         shutil.copyfile(ROOT / name, tmp_path / name)
+    v = V(version)
+    pyproject = tmp_path / "pyproject.toml"
+    pyproject.write_text(release.edit_pyproject(pyproject.read_text(), v))
+    changelog = tmp_path / "CHANGELOG.md"
+    changelog.write_text(
+        re.sub(
+            r"(?m)^\[Unreleased\]: .*$",
+            f"[Unreleased]: {release.REPO_URL}/compare/{release.tag(v)}...HEAD",
+            changelog.read_text(),
+        )
+    )
+    readme = tmp_path / "README.md"
+    readme.write_text(re.sub(r"@v\d+\.\d+\.\d+\b(?!-)", f"@{release.tag(v)}", readme.read_text()))
     return tmp_path
 
 
@@ -117,6 +133,7 @@ def test_pkgbuild_follows() -> None:
     assert "pkgver=0.3.0b1\npkgrel=1\n_tag=v0.3.0-beta.1\n" in out
 
 
-def test_next_command(capsys: pytest.CaptureFixture[str]) -> None:
+def test_next_command(capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(release, "current_version", lambda root=None: V("0.2.0"))
     assert release.main(["next", "minor", "--pre", "beta"]) == 0
     assert "-beta.1" in capsys.readouterr().out
