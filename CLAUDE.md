@@ -467,6 +467,7 @@ Before adding modes, FT8 through WSJT-X has to work on many stations: different 
 - `installer/linux/signal-archive-recorder.desktop` (`Exec=signal-archive-recorder-gui`, category `HamRadio`) is used by both packages.
 - `installer/linux/smoke_test.py` uses only the standard library and runs next to an installed package. It checks the version and the libraries (diagnostics), then a standby → record → saved session (WSJT-X played by replaying our own captured datagrams), then the desktop app offscreen with a second start and SIGTERM, then `forget --dry-run`.
 - `.github/workflows/linux-packages.yml` builds the .deb, then installs and smoke-tests it in Debian 12 and 13 and Ubuntu 22.04 and 24.04 containers (and removes it). It also builds and installs the AUR package in an Arch container (AUR dependencies included) and smoke-tests it. On a published release it attaches the .deb.
+- **Never bundle `libstdc++`/`libgcc_s` on Linux** (the spec filters them out; the .deb depends on the system's). The first CI run failed on Debian 13 and Ubuntu 24.04 because the bundled Ubuntu 22.04 runtime was older than what the system's PortAudio → JACK needs.
 - A bug the Linux smoke test found: the packaged desktop program treated `--config FILE` (options with no command) as the terminal `record`. Fixed with `gui.desktop_args`.
 - **Open:** the .deb's `Maintainer` field holds the project URL until there's a project email (perhaps the groups.io address).
 
