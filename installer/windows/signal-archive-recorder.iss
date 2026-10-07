@@ -49,7 +49,8 @@ WizardStyle=modern
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 VersionInfoVersion={#NumericVersion}
-VersionInfoProductVersion={#AppVersion}
+VersionInfoProductVersion={#NumericVersion}
+VersionInfoProductTextVersion={#AppVersion}
 ; The app holds this mutex while running: (un)installing asks to close it first.
 AppMutex=SignalArchiveRecorderRunning
 CloseApplications=yes

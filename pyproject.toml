@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "signal-archive-recorder"
-version = "0.2.0"
+version = "0.3.0b1"
 description = "Bit-exact receive audio and metadata recorder for ham digital modes (Signal Archive Project)"
 readme = "README.md"
 license = "MPL-2.0"

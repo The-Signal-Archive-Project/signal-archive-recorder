@@ -4,6 +4,8 @@ All notable changes to Signal Archive Recorder. Versions follow [semantic versio
 
 ## [Unreleased]
 
+## [0.3.0-beta.1] - 2026-10-06
+
 ### Linux packages
 - **Debian/Ubuntu `.deb`**: a self-contained app (its own Python) for Debian 12+ and Ubuntu 22.04+, with a menu entry, icon and `signal-archive-recorder`/`signal-archive-recorder-gui` commands. Attached to each release, and installed, smoke-tested and removed on all four releases in CI.
 - **Arch Linux (AUR)**: `signal-archive-recorder`, built from the release's source package with Arch's own Python packages, and tested in an Arch container in CI. `installer/aur/update.py` prepares each release's update for the AUR.
@@ -95,6 +97,7 @@ The first release. It records bit-exact receive audio from a ham station, labels
 - No GPL dependencies (enforced in CI); DCO sign-off on every commit.
 - CI on Linux and Windows with Python 3.11 and 3.14.
 
-[Unreleased]: https://github.com/The-Signal-Archive-Project/signal-archive-recorder/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/The-Signal-Archive-Project/signal-archive-recorder/compare/v0.3.0-beta.1...HEAD
+[0.3.0-beta.1]: https://github.com/The-Signal-Archive-Project/signal-archive-recorder/compare/v0.2.0...v0.3.0-beta.1
 [0.2.0]: https://github.com/The-Signal-Archive-Project/signal-archive-recorder/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/The-Signal-Archive-Project/signal-archive-recorder/releases/tag/v0.1.0
