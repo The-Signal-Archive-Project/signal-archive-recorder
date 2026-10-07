@@ -404,3 +404,13 @@ def test_beta_setup_says_where_recordings_go(tmp_path: Path) -> None:
     wizard.repo_id = TEST_REPO
     wizard.run(tmp_path / "r.toml")
     assert "TEST dataset" in script.text
+
+
+def test_a_beta_never_uploads_to_the_real_archive() -> None:
+    from signal_archive_recorder.config import upload_repo
+    from signal_archive_recorder.upload.hub import PRODUCTION_REPO, TEST_REPO
+
+    assert upload_repo(PRODUCTION_REPO, "0.3.0b2") == TEST_REPO  # beta.1's setup wrote this
+    assert upload_repo(PRODUCTION_REPO, "0.3.0") == PRODUCTION_REPO
+    assert upload_repo("someone/their-own-test", "0.3.0b2") == "someone/their-own-test"
+    assert upload_repo(TEST_REPO, "0.3.0") == TEST_REPO  # a release can still be pointed at test

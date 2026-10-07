@@ -6,6 +6,9 @@ All notable changes to Signal Archive Recorder. Versions follow [semantic versio
 
 ## [0.3.0-beta.2] - 2026-10-07
 
+### Fixed
+- **A beta never uploads to the real archive**, even if its settings name it (as 0.3.0-beta.1's setup wrote): it uses the test dataset. Beta 1 testers just install beta 2 over it.
+
 ### For testers
 - **Report a problem…** in the tray menu and the window: saves the diagnostics file, then opens the test-report or bug form, the groups.io group, or the community links. The window shows the version at the bottom.
 - **[TESTING.md](TESTING.md)**, a guide for beta testers (install, setup, what to try, how to report, known issues, uninstalling), and [docs/tested-setups.md](docs/tested-setups.md), the setups covered so far.

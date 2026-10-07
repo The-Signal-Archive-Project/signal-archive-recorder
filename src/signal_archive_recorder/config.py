@@ -59,7 +59,12 @@ from signal_archive_recorder.audio.channels import Keep
 from signal_archive_recorder.audio.format import SampleFormat
 from signal_archive_recorder.clockmon.monitor import DEFAULT_SERVERS
 from signal_archive_recorder.metadata.settings import StationSettings
-from signal_archive_recorder.upload.hub import DEFAULT_REPO
+from signal_archive_recorder.upload.hub import (
+    DEFAULT_REPO,
+    PRODUCTION_REPO,
+    TEST_REPO,
+    default_repo,
+)
 from signal_archive_recorder.upload.service import Window
 
 
@@ -145,6 +150,14 @@ _SECTIONS = {
 }  # fmt: skip
 
 
+def upload_repo(configured: str, version: str | None = None) -> str:
+    """Betas and release candidates never upload to the real archive. A setting that
+    names it (written by 0.3.0-beta.1's setup, say) is read as the test dataset."""
+    if configured == PRODUCTION_REPO and default_repo(version) == TEST_REPO:
+        return TEST_REPO
+    return configured
+
+
 def _check_keys(data: dict[str, Any]) -> None:
     for section, values in data.items():
         if section not in _SECTIONS:
@@ -221,7 +234,7 @@ def parse_config(data: dict[str, Any], base: Path = Path()) -> RecorderConfig:
                 group=wsjtx.get("group") or None,
             ),
             upload=UploadConfig(
-                repo=upload.get("repo", UploadConfig.repo),
+                repo=upload_repo(upload.get("repo", UploadConfig.repo)),
                 require_decoder=bool(upload.get("require_decoder", True)),
                 schedule=upload.get("schedule", "manual"),
                 overnight_window=upload.get("overnight_window", "01:00-06:00"),
