@@ -37,6 +37,8 @@ NAME = "signal-archive-recorder"
 
 DEPENDS = [
     "libc6 (>= 2.35)",
+    "libstdc++6",  # the system's C++ runtime, deliberately not bundled (see the spec)
+    "libgcc-s1",
     "libportaudio2",
     # What Qt needs to show windows and the tray icon (X11 or Wayland via XWayland):
     "libegl1",

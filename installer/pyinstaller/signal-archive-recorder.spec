@@ -40,6 +40,13 @@ def analysis(script):
 
 
 gui, console = analysis("gui_entry.py"), analysis("console_entry.py")
+if sys.platform.startswith("linux"):
+    # Use the system's C++ runtime, never the build machine's: it's backwards
+    # compatible, and system libraries loaded later (PortAudio pulls in JACK) may
+    # need a newer one than Ubuntu 22.04's. Debian 13 and Ubuntu 24.04 do.
+    SYSTEM_ONLY = ("libstdc++.so", "libgcc_s.so")
+    for a in (gui, console):
+        a.binaries = [b for b in a.binaries if not b[0].startswith(SYSTEM_ONLY)]
 common = dict(exclude_binaries=True, upx=False)
 if sys.platform == "win32":  # the exe icon and version resource are Windows things
     common.update(icon=f"{WINDOWS}/icon.ico", version=f"{WINDOWS}/version_info.txt")
