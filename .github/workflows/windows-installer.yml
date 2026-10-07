@@ -20,6 +20,7 @@ jobs:
   installer:
     name: build and smoke-test the Windows installer
     runs-on: windows-latest
+    timeout-minutes: 45
     permissions:
       contents: write  # attach the installer to a release
     steps:
