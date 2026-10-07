@@ -66,6 +66,11 @@ def _label(v: Version) -> str:
     return base
 
 
+def display_version(version: str = __version__) -> str:
+    """The version as people see it: 0.3.0b2 -> 0.3.0-beta.2."""
+    return _label(Version(version))
+
+
 def notice(release: Release, current: str = __version__) -> Notice:
     mine = Version(current)
     new = release.version

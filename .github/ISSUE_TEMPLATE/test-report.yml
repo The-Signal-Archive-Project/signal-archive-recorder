@@ -1,0 +1,105 @@
+name: Test report
+description: Tell us how Signal Archive Recorder ran on your station, whether it worked or not.
+title: "Test report: "
+labels: ["test-report", "beta"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for testing! Every station is different, and reports that it **worked** are just as useful as reports of problems.
+        If something went wrong, please attach the diagnostics file: in the recorder's window choose **Report a problem… → Save diagnostics**, then drag the zip into the last box. It contains no audio and no passwords, and your names are blanked out.
+  - type: input
+    id: version
+    attributes:
+      label: Recorder version
+      description: Shown at the bottom of the status window, or run `signal-archive-recorder --version`.
+      placeholder: 0.3.0-beta.2
+    validations:
+      required: true
+  - type: dropdown
+    id: result
+    attributes:
+      label: Overall, did it work?
+      options:
+        - "Yes, everything worked"
+        - "Mostly: it worked, with some problems"
+        - "No: it didn't work"
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Windows 11
+        - Windows 10
+        - Ubuntu
+        - Debian
+        - Linux Mint
+        - Arch / Manjaro / EndeavourOS
+        - Fedora
+        - Other Linux
+        - macOS
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How did you install it?
+      options:
+        - Windows installer (Setup.exe)
+        - Debian/Ubuntu package (.deb)
+        - Arch (AUR)
+        - pipx / pip
+    validations:
+      required: true
+  - type: input
+    id: radio
+    attributes:
+      label: Radio
+      placeholder: e.g. IC-7300, FT-991A, TS-590SG, SDR (which?)
+  - type: dropdown
+    id: interface
+    attributes:
+      label: How the radio's audio reaches the computer
+      options:
+        - The radio's built-in USB audio
+        - SignaLink
+        - Digirig
+        - Another sound interface
+        - SDR or a virtual audio cable
+        - Not sure
+  - type: input
+    id: decoder
+    attributes:
+      label: WSJT-X (or JTDX) version
+      placeholder: e.g. WSJT-X 2.7.0
+  - type: dropdown
+    id: sharing
+    attributes:
+      label: Other programs using WSJT-X's data
+      multiple: true
+      options:
+        - None
+        - GridTracker
+        - JTAlert
+        - Log4OM / other logger
+        - Something else
+  - type: checkboxes
+    id: worked
+    attributes:
+      label: What worked? (tick all that did)
+      options:
+        - label: Setup finished, including the Hugging Face login
+        - label: The tray icon appeared
+        - label: Recording started when WSJT-X was running
+        - label: Recording stopped when WSJT-X closed
+        - label: Review & upload showed my sessions
+        - label: An upload went through
+  - type: textarea
+    id: notes
+    attributes:
+      label: What happened? Anything surprising, confusing or broken?
+      description: Drag the diagnostics zip (and screenshots) into this box if something went wrong.
+    validations:
+      required: true

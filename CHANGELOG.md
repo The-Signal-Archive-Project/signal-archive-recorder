@@ -4,6 +4,11 @@ All notable changes to Signal Archive Recorder. Versions follow [semantic versio
 
 ## [Unreleased]
 
+### For testers
+- **Report a problem…** in the tray menu and the window: saves the diagnostics file, then opens the test-report or bug form, the groups.io group, or the community links. The window shows the version at the bottom.
+- **[TESTING.md](TESTING.md)**, a guide for beta testers (install, setup, what to try, how to report, known issues, uninstalling), and [docs/tested-setups.md](docs/tested-setups.md), the setups covered so far.
+- GitHub **issue forms** for test reports, bugs and ideas, a [SECURITY.md](SECURITY.md) for private reports, and a Community section in the README (groups.io, Discord).
+
 ### Testing
 - **Betas upload to the test dataset** (`signal-archive-intake-test`), and releases to the real archive. Setup no longer writes the upload repository into the config, so upgrading from a beta to the release moves uploads over by itself. Setup tells beta testers where their recordings go.
 

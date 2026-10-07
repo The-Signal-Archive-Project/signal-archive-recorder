@@ -475,7 +475,12 @@ Before adding modes, FT8 through WSJT-X has to work on many stations: different 
 - A bug the Linux smoke test found: the packaged desktop program treated `--config FILE` (options with no command) as the terminal `record`. Fixed with `gui.desktop_args`.
 - **Open:** the .deb's `Maintainer` field holds the project URL until there's a project email (perhaps the groups.io address).
 
-**H4: the testing round.** `TESTING.md` for testers, GitHub issue templates (setup details plus the diagnostics zip), a setups-covered matrix, an announcement text, and a **v0.3.0-beta.1** pre-release.
+**H4: the testing round (done, except the validator)**
+- Community (set up by the owner on 2026-10-07): **groups.io** <https://groups.io/g/signal-archive> (post by email to `main@signal-archive.groups.io`), **Discord** (its invite is only in the README's Community section: invites expire, so nothing shipped in the app links to one), and **GitHub Issues** with labels `test-report`, `beta`, `windows`, `linux`, `needs-info` and `confirmed`.
+- `src/signal_archive_recorder/links.py` holds every link the app shows. `ui/report.py` `ReportDialog` ("Report a problem…" in the tray and window) saves diagnostics and opens the test-report or bug form, the group, or `#community`. The window shows `updates.display_version()`.
+- `.github/ISSUE_TEMPLATE/`: `test-report.yml` (OS, install method, radio, interface, decoder, sharing, what worked, the diagnostics zip), `bug-report.yml`, `idea.yml`, and `config.yml` (no blank issues; links to groups.io, community and private security reporting). Plus `SECURITY.md`.
+- `TESTING.md` (the tester guide), `docs/tested-setups.md` (the coverage matrix: add a row per report) and `docs/announcement.md` (texts for forums, Discord and nets).
+- **Not yet (owner's decision):** the intake validator bot.
 
 ### Stage 10: More modes and sources (v0.4)
 
