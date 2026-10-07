@@ -76,14 +76,17 @@ def repo_copy(tmp_path: Path, version: str = "0.2.0") -> Path:
         shutil.copyfile(ROOT / name, tmp_path / name)
     v = V(version)
     pyproject = tmp_path / "pyproject.toml"
-    pyproject.write_text(release.edit_pyproject(pyproject.read_text(encoding="utf-8"), v))
+    pyproject.write_text(
+        release.edit_pyproject(pyproject.read_text(encoding="utf-8"), v), encoding="utf-8"
+    )
     changelog = tmp_path / "CHANGELOG.md"
     changelog.write_text(
         re.sub(
             r"(?m)^\[Unreleased\]: .*$",
             f"[Unreleased]: {release.REPO_URL}/compare/{release.tag(v)}...HEAD",
             changelog.read_text(encoding="utf-8"),
-        )
+        ),
+        encoding="utf-8",
     )
     readme = tmp_path / "README.md"
     readme.write_text(
@@ -98,7 +101,7 @@ def test_prepare_a_final_release(tmp_path: Path) -> None:
     changelog = (root / "CHANGELOG.md").read_text(encoding="utf-8")
     if not release.unreleased_entries(changelog):  # make sure there's something to release
         changelog = changelog.replace("## [Unreleased]\n", "## [Unreleased]\n\n### Fixed\n- x\n", 1)
-        (root / "CHANGELOG.md").write_text(changelog)
+        (root / "CHANGELOG.md").write_text(changelog, encoding="utf-8")
     old = release.current_version(root)
     p = release.plan(root, "minor", None, DAY)
     new = release.semver(p.new)
@@ -116,7 +119,8 @@ def test_a_beta_leaves_the_readme_alone(tmp_path: Path) -> None:
     root = repo_copy(tmp_path)
     changelog = (root / "CHANGELOG.md").read_text(encoding="utf-8")
     (root / "CHANGELOG.md").write_text(
-        changelog.replace("## [Unreleased]\n", "## [Unreleased]\n\n### Fixed\n- y\n", 1)
+        changelog.replace("## [Unreleased]\n", "## [Unreleased]\n\n### Fixed\n- y\n", 1),
+        encoding="utf-8",
     )
     p = release.plan(root, "minor", "beta", DAY)
     assert p.files[root / "README.md"] == (root / "README.md").read_text(encoding="utf-8")

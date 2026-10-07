@@ -58,20 +58,20 @@ def main() -> int:
     parser.add_argument("--to", type=Path, required=True, help="your clone of the AUR repo")
     parser.add_argument("--pkgbuild", type=Path, default=HERE / "PKGBUILD")
     args = parser.parse_args()
-    template = args.pkgbuild.read_text()
+    template = args.pkgbuild.read_text(encoding="utf-8")
     url = source_url(template)
     print(f"downloading {url}", flush=True)
     with urllib.request.urlopen(url, timeout=60) as response:
         sha256 = hashlib.sha256(response.read()).hexdigest()
     pkgbuild = with_checksum(template, sha256)
     args.to.mkdir(parents=True, exist_ok=True)
-    (args.to / "PKGBUILD").write_text(pkgbuild)
+    (args.to / "PKGBUILD").write_text(pkgbuild, encoding="utf-8")
     if not shutil.which("makepkg"):
         raise SystemExit("makepkg not found: run this on Arch to write .SRCINFO")
     srcinfo = subprocess.run(
         ["makepkg", "--printsrcinfo"], cwd=args.to, check=True, capture_output=True, text=True
     ).stdout
-    (args.to / ".SRCINFO").write_text(srcinfo)
+    (args.to / ".SRCINFO").write_text(srcinfo, encoding="utf-8")
     print(f"wrote PKGBUILD and .SRCINFO for {field(template, 'pkgver')} (sha256 {sha256[:12]}…)")
     print(f"review, then: cd {args.to} && git add PKGBUILD .SRCINFO && git commit && git push")
     return 0

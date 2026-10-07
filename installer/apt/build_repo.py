@@ -147,7 +147,7 @@ def write_channel(site: Path, suite: str, deb: Path | None, now: dt.datetime) ->
     for path, content in index.items():
         (dist / path).parent.mkdir(parents=True, exist_ok=True)
         (dist / path).write_bytes(content)
-    (dist / "Release").write_text(release_file(suite, index, now))
+    (dist / "Release").write_text(release_file(suite, index, now), encoding="utf-8")
 
 
 def sign(site: Path, key_id: str) -> None:
@@ -165,7 +165,7 @@ def sign(site: Path, key_id: str) -> None:
 
 
 def index_html(chosen: dict[str, Deb | None]) -> str:
-    template = (HERE / "index.template.html").read_text()
+    template = (HERE / "index.template.html").read_text(encoding="utf-8")
     for suite in CHANNELS:
         deb = chosen[suite]
         template = template.replace(f"{{{suite}}}", deb.tag if deb else "nothing yet")
@@ -200,8 +200,8 @@ def build(
         write_channel(site, suite, path if path and path.exists() else None, now)
         print(f"{suite}: {deb.tag if deb else 'empty (no package yet)'}", flush=True)
     shutil.copyfile(HERE / "signal-archive.asc", site / "signal-archive.asc")
-    (site / "index.html").write_text(index_html(chosen))
-    (site / ".nojekyll").write_text("")  # serve dists/ and pool/ as they are
+    (site / "index.html").write_text(index_html(chosen), encoding="utf-8")
+    (site / ".nojekyll").write_text("", encoding="utf-8")  # serve dists/ and pool/ as they are
     return chosen
 
 

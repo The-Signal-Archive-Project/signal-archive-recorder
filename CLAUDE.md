@@ -94,6 +94,7 @@ LICENSE (MPL-2.0), NOTICE
 - **Inject time everywhere** through `core.clock.Clock`. Tests use `FakeClock` so that boundary and NTP tests are deterministic. Times are integer nanoseconds since the Unix epoch (UTC).
 - **`tests/unit/test_architecture.py` enforces two rules:** no mode names (ids, display names, aliases) as string literals outside `modes/` and `sources/`, and no direct `time`/`datetime` clock reads outside `core/clock.py`.
 - **UDP parser fixtures** come from datagrams captured on our own station plus hand-built ones. When the protocol is unclear, capture more traffic and update `docs/protocols/`; never consult the other program's source code (see Licensing).
+- **Always pass `encoding="utf-8"`** to `read_text`, `write_text`, `open` and `configparser.read`. Windows defaults to cp1252, which breaks on emoji and other non-ASCII text (this broke PR #40 on Windows CI). To check: `python -X warn_default_encoding -W error::EncodingWarning -m pytest <tests>`.
 - **Keep the UI thin.** If logic is creeping into `ui/`, move it into `session/` or `upload/` and test it there.
 
 Commands:
