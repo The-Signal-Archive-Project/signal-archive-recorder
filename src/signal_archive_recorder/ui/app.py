@@ -20,6 +20,7 @@ import getpass
 import hashlib
 import logging
 import signal
+import sys
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Protocol
@@ -369,6 +370,45 @@ class _Window(StatusWindow):
             super().closeEvent(event)
 
 
+WINDOWS_MUTEX = "SignalArchiveRecorderRunning"  # the installer's AppMutex: "close it first"
+ERROR_ALREADY_EXISTS = 183
+
+
+def app_icon() -> QIcon:
+    from importlib.resources import files
+
+    data = files("signal_archive_recorder.data").joinpath("icon.png").read_bytes()
+    pixmap = QPixmap()
+    if not pixmap.loadFromData(data):
+        return QIcon(dot("green", 64))
+    return QIcon(pixmap)
+
+
+def _windows_mutex(name: str) -> tuple[object, bool]:
+    """Create (or open) a named mutex; returns its handle and whether it already existed.
+    Held for the life of the process; Windows releases it when the process ends."""
+    if sys.platform == "win32":
+        import ctypes
+
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32.CreateMutexW.restype = ctypes.c_void_p
+        handle = kernel32.CreateMutexW(None, False, name)
+        return handle, ctypes.get_last_error() == ERROR_ALREADY_EXISTS
+    return None, False
+
+
+def _close_handle(handle: object) -> None:
+    if sys.platform == "win32" and handle:
+        import ctypes
+
+        ctypes.WinDLL("kernel32").CloseHandle(ctypes.c_void_p(handle))  # type: ignore[arg-type]
+
+
+def _announce_running() -> object:
+    """On Windows, a named mutex lets the installer see the app is running."""
+    return _windows_mutex(WINDOWS_MUTEX)[0]
+
+
 class QuitOnSignals:
     """Ctrl-C, SIGTERM (logout, `kill`, systemd) and Ctrl-Break end the app cleanly.
 
@@ -410,15 +450,30 @@ class SingleInstance:
         )
         self.server = QLocalServer()
         self.on_show: Callable[[], None] = lambda: None
+        self._mutex: object = None
+
+    def notify(self) -> bool:
+        """Ask a running instance to show its window; True if one answered."""
+        probe = QLocalSocket()
+        probe.connectToServer(self.name)
+        if not probe.waitForConnected(500):
+            return False
+        probe.write(b"show\n")
+        probe.waitForBytesWritten(500)
+        probe.abort()  # never wait on the pipe closing (it can hang on Windows)
+        return True
 
     def acquire(self) -> bool:
         """True if this is the only instance; otherwise asks the running one to show itself."""
-        probe = QLocalSocket()
-        probe.connectToServer(self.name)
-        if probe.waitForConnected(500):
-            probe.write(b"show\n")
-            probe.waitForBytesWritten(500)
-            probe.disconnectFromServer()
+        # On Windows a named mutex is the reliable test: named pipes accept several
+        # servers with one name, so listening alone would never say "taken".
+        self._mutex, taken = _windows_mutex(f"Local\\{self.name}")
+        if taken:
+            _close_handle(self._mutex)  # it's the other instance's; don't keep it alive
+            self._mutex = None
+            self.notify()
+            return False
+        if self.notify():
             return False
         QLocalServer.removeServer(self.name)  # left over from a crash
         if not self.server.listen(self.name):
@@ -429,12 +484,14 @@ class SingleInstance:
 
     def _connection(self) -> None:
         while (conn := self.server.nextPendingConnection()) is not None:
-            conn.readyRead.connect(conn.readAll)
+            conn.readyRead.connect(lambda c=conn: c.readAll())
             conn.disconnected.connect(conn.deleteLater)
             self.on_show()
 
     def release(self) -> None:
         self.server.close()
+        _close_handle(self._mutex)
+        self._mutex = None
 
 
 def run(
@@ -504,7 +561,8 @@ def main(
     app = QApplication.instance() or QApplication([])
     assert isinstance(app, QApplication)
     app.setApplicationName("Signal Archive Recorder")
-    app.setWindowIcon(QIcon(dot("green", 64)))
+    app.setWindowIcon(app_icon())
+    running = _announce_running()
     QuitOnSignals(app)  # also during setup
     instance = SingleInstance()
     if not instance.acquire():
@@ -534,3 +592,4 @@ def main(
         )
     finally:
         instance.release()
+        del running

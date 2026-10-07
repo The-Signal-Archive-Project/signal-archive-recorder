@@ -11,3 +11,13 @@ dynamically at run time and not modified:
   icon (the "gui" extra). They're offered under a choice of LGPL-3.0, GPL-2.0 or
   GPL-3.0; Signal Archive Recorder uses them under LGPL-3.0, as separately
   installed, dynamically loaded libraries. https://www.qt.io/qt-licensing
+
+The Windows installer additionally bundles, as separate files in the program
+folder:
+- the Python runtime (PSF License) and the Python packages listed above, each
+  with its own license file in the "licenses" folder;
+- PortAudio (MIT), bundled in the sounddevice package's wheels;
+- the PyInstaller bootloader (GPL-2.0 with a special exception that allows it to
+  be distributed with programs under any license), https://pyinstaller.org.
+Qt and libsndfile stay separate, replaceable DLLs, as the LGPL requires. The
+installer itself is built with Inno Setup (https://jrsoftware.org/isinfo.php).
