@@ -10,6 +10,8 @@ Post from the group's web page or by email to `main@signal-archive.groups.io`, t
 
 > Hello everyone, and welcome to the Signal Archive group!
 >
+> I'm Alistair, KQ4YDE, an undergraduate aerospace engineering student in Eastern Kentucky. I've been into ham radio for a while, I'm on the development team for the CXBN-3 satellite, and I love working with digital RF signals and writing code. This project is where those meet, and I'd love your help with it.
+>
 > **Why this project exists**
 >
 > The decoders we rely on for FT8, FT4 and the other digital modes were built and tuned without a large, shared collection of real signals. Weak signals at the noise floor, fading, QRM and crowded bands, as they really arrive at stations around the world, mostly go unrecorded. The Signal Archive Project is building an open library of exactly that audio, free for anyone to use for research and for building better decoders and detectors.
@@ -51,7 +53,10 @@ Post from the group's web page or by email to `main@signal-archive.groups.io`, t
 >
 > For quick questions and chat, there's also our Discord: https://discord.gg/R8g5F8BcAC
 >
-> Thank you for helping. 73!
+> Thank you for helping!
+>
+> 73,
+> Alistair, KQ4YDE
 
 ## Discord: beta announcement for #announcements (posted for 0.3.0-beta.2)
 
@@ -59,6 +64,7 @@ Discord allows 2,000 characters per message; this is about 1,740. The `<…>` ar
 
 ```
 # 📻 Beta testers wanted: Signal Archive Recorder 0.3.0-beta.2
+👋 I'm Alistair (KQ4YDE), an aerospace undergrad in Eastern KY on the CXBN-3 satellite team, and this is my project.
 
 Better decoders for our digital modes need **real recordings**: weak signals in the noise, fading, QRM, crowded bands. Signal Archive Recorder runs beside WSJT-X and records exactly what your receiver hears, for an **open dataset** anyone can use to build better decoders. It's free and open source, never transmits, and never touches your radio.
 
@@ -79,7 +85,7 @@ Something wrong? Tray menu → **Report a problem…** saves a diagnostics file 
 
 ℹ️ Beta recordings go to a **test dataset** that may be wiped. When the full release lands, the app tells you, and recordings go to the real archive.
 
-Questions? Ask right here, or on <https://groups.io/g/signal-archive>. Thanks, and 73! 🙏
+Questions? Ask right here, or on <https://groups.io/g/signal-archive>. Thanks, and 73! — Alistair KQ4YDE 🙏
 ```
 
 ## Forums, reflectors and club newsletters
@@ -96,6 +102,7 @@ We're looking for beta testers running WSJT-X or JTDX on Windows, Debian/Ubuntu 
 - Questions: https://groups.io/g/signal-archive
 
 73, and thank you!
+Alistair, KQ4YDE (aerospace engineering undergrad, Eastern Kentucky; CXBN-3 satellite team)
 
 ## Short (Discord, social media, a club net)
 

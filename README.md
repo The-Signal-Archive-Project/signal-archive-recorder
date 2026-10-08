@@ -158,6 +158,14 @@ Set `[audio] file = "something.wav"` to play a 16- or 24-bit WAV as if it were a
 - **Bugs and test reports:** [GitHub Issues](https://github.com/The-Signal-Archive-Project/signal-archive-recorder/issues/new/choose). No GitHub account? Post to the group instead.
 - **Security problems:** please report them privately ([SECURITY.md](SECURITY.md)).
 
+## Who's behind this
+
+Hi, I'm Alistair, **KQ4YDE**, an undergraduate aerospace engineering student in Eastern Kentucky. I've been into ham radio for a while, I'm on the development team for the **CXBN-3** satellite, and I love working with digital RF signals and writing code. Signal Archive Recorder is where those meet: good decoders need real signals to learn from, and there's no big, open collection of them yet, so I'm building one with the help of hams everywhere.
+
+It's a one-person project for now, built between classes, so every test report, bug report and recording genuinely helps. Thank you for being part of it!
+
+73, Alistair KQ4YDE
+
 ## Development
 
 ```bash
