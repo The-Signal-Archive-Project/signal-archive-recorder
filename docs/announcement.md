@@ -88,6 +88,57 @@ Something wrong? Tray menu → **Report a problem…** saves a diagnostics file 
 Questions? Ask right here, or on <https://groups.io/g/signal-archive>. Thanks, and 73! — Alistair KQ4YDE 🙏
 ```
 
+## Reddit (r/amateurradio and similar)
+
+Post from a project account (e.g. `u/KQ4YDE`), not a personal one, and **message the subreddit's moderators first**: new accounts and project links are often held for review. Use Markdown mode. Don't vote or comment on the post from another account of yours.
+
+**Title:** I'm an undergrad building an open dataset of real FT8/FT4 signals to train better decoders, looking for beta testers and developers
+
+**Body:**
+
+```markdown
+Hi r/amateurradio! I'm Alistair (KQ4YDE), an undergraduate aerospace engineering student in Eastern Kentucky. I'm on the development team for the CXBN-3 satellite, and I spend a lot of my time on digital RF signals and code.
+
+**The problem:** the decoders we all rely on were built and tuned without a large, shared collection of *real* signals. Weak signals at the noise floor, QSB, QRM and crowded bands, as they actually arrive at stations around the world, mostly go unrecorded. Without that data, it's hard to build better decoders or detectors, or even to compare them fairly.
+
+**What I built:** [Signal Archive Recorder](https://github.com/The-Signal-Archive-Project/signal-archive-recorder), a free, open-source (MPL-2.0) program that runs beside WSJT-X:
+
+- It records exactly what your receiver hears (bit-exact FLAC, no resampling), and **only while WSJT-X is running**. Otherwise it sits idle in the tray.
+- It labels every recording with band, mode, timing and clock accuracy from WSJT-X and NTP.
+- It never transmits and never controls your rig. It only listens to WSJT-X's UDP output and your audio.
+- Nothing is uploaded until you've reviewed it. Your callsign is only shared if you choose, and it keeps back anything that doesn't look like receiver audio.
+- With your consent, recordings go to an open dataset on Hugging Face (CC BY 4.0) that anyone can use for research.
+
+## Looking for beta testers
+
+It's in public beta (0.3.0-beta). I need it tested on as many different stations as possible: any radio, any sound interface (rig USB, SignaLink, Digirig…), Windows or Linux. There's a Windows installer, an apt repository for Debian/Ubuntu, and pipx for everything else. Setup takes about 15 minutes; after that you just run WSJT-X as normal.
+
+- **Tester guide:** https://github.com/The-Signal-Archive-Project/signal-archive-recorder/blob/main/TESTING.md
+- "It worked on my station" reports are just as valuable as bug reports. There's a short form, or you can post to the group.
+- During the beta, uploads go to a *test* dataset, so you can try everything without worrying.
+
+## Looking for developers
+
+It's Python (PySide6 for the UI), with a large test suite and CI that builds and tests the Windows installer and the Linux packages. Places I'd love help:
+
+- **More modes and sources:** adapters for fldigi, JS8Call, rigctld and flrig (read-only), so it can go beyond FT8/FT4
+- **macOS packaging and testing:** it runs from source, but I don't have a Mac
+- **Satellites:** Doppler and TLE metadata from Gpredict and similar, close to my heart from CubeSat work
+- **Using the data:** if you're into DSP or ML, I'd love to hear what you'd want from the dataset for decoder and detector research
+
+Contributor guide: https://github.com/The-Signal-Archive-Project/signal-archive-recorder/blob/main/CONTRIBUTING.md
+
+**Questions and chat:** groups.io (https://groups.io/g/signal-archive) or Discord (https://discord.gg/R8g5F8BcAC). I'm also happy to answer anything in the comments: questions, feedback and criticism all welcome.
+
+73, Alistair KQ4YDE
+```
+
+**Answers worth having ready for the comments:**
+- *Why not just use WSJT-X's own recordings?* WSJT-X can save WAV files, but they don't have the metadata, timing references or a shared, consented, openly licensed home. The archive also keeps the decoder's output separate from the raw audio, for fair comparisons.
+- *Does it use WSJT-X's code?* No. It only reads WSJT-X's network messages, as GridTracker and JTAlert do, and contains no WSJT-X code.
+- *Privacy?* The callsign is opt-in, the grid is shared to 4 characters by default, every upload is reviewed first, and diagnostics files have names and tokens removed.
+- *Storage and bandwidth?* About 0.25 GB per hour of mono audio. Uploads can be capped, scheduled overnight, or left manual, and only confirmed uploads are ever deleted locally.
+
 ## Forums, reflectors and club newsletters
 
 **Subject: Beta testers wanted: Signal Archive Recorder, an open library of real FT8/FT4 signals**
